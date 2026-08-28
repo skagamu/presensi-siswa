@@ -8,7 +8,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const navLinks = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Semua Alert", href: "/semua-alert", icon: ListTodo },
     { name: "Presensi", href: "/presensi", icon: Users },
     { name: "Bank Kasus", href: "/bank-kasus", icon: FileWarning },
