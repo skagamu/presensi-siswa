@@ -1,0 +1,36 @@
+"use client";
+
+import { useAuth } from "@/lib/AuthContext";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+export function AuthGuard({ children }: { children: React.ReactNode }) {
+  const { user, isReady } = useAuth();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isReady) {
+      // Jika belum login dan mencoba mengakses halaman selain login
+      if (!user && pathname !== "/login") {
+        router.push("/login");
+      }
+      // Jika sudah login dan mencoba mengakses halaman login
+      if (user && pathname === "/login") {
+        router.push("/");
+      }
+    }
+  }, [user, isReady, pathname, router]);
+
+  // Tampilkan blank screen sebentar saat mengecek local storage agar tidak kedip
+  if (!isReady) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-medium">Memuat Sesi...</div>;
+  }
+
+  // Jika belum login dan ada di selain halaman login, jangan render isinya
+  if (!user && pathname !== "/login") {
+    return null;
+  }
+
+  return <>{children}</>;
+}

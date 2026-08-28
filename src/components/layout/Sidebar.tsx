@@ -27,7 +27,7 @@ export function Sidebar() {
             <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
               <span className="text-white text-sm">BK</span>
             </div>
-            <span>Square BK</span>
+            <span>Sistem BK</span>
           </div>
         </div>
 
@@ -63,7 +63,7 @@ export function Sidebar() {
         <div className="p-4 border-t border-gray-100">
           <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
             <p className="text-xs font-semibold text-gray-900">Guru BK Mode</p>
-            <p className="text-[10px] text-gray-500 mt-0.5">V6.0 (Separated Alerts)</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">Akses Khusus Admin</p>
           </div>
         </div>
       </aside>

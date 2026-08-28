@@ -1,0 +1,48 @@
+--- src/app/dashboard/page.tsx
++++ src/app/dashboard/page.tsx
+@@ -1,6 +1,7 @@
+ "use client";
+ 
+ import { useState, useEffect } from "react";
++import Link from "next/link";
+ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+ import { Button } from "@/components/ui/button";
+ import { Badge } from "@/components/ui/badge";
+@@ -141,7 +142,7 @@
+           <div>
+             <div className="flex justify-between items-end mb-3">
+                <h2 className="text-xl font-bold tracking-tight text-gray-900">Priority Alerts Top 3</h2>
+-               <a href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</a>
++               <Link href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
+             </div>
+ 
+             <div className="flex flex-col gap-2">
+@@ -218,7 +219,7 @@
+           <div>
+             <div className="flex justify-between items-end mb-2">
+                <h2 className="text-xl font-bold tracking-tight text-gray-900">Rekap Singkat ({new Date().toLocaleDateString('id-ID', {month: 'long'})})</h2>
+-               <a href="/rekap" className="text-sm font-semibold text-primary hover:underline">Detail</a>
++               <Link href="/rekap" className="text-sm font-semibold text-primary hover:underline">Detail</Link>
+             </div>
+             
+             <Card className="border-0 sm:border rounded-xl shadow-sm">
+@@ -248,7 +249,7 @@
+           <div>
+             <div className="flex justify-between items-end mb-3">
+                <h2 className="text-xl font-bold tracking-tight text-gray-900">5 Kasus Terakhir</h2>
+-               <a href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</a>
++               <Link href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
+             </div>
+             
+             <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+@@ -274,9 +275,9 @@
+                </div>
+ 
+                <div className="p-3 bg-gray-50 border-t border-gray-100 text-center mt-auto">
+-                 <a href="/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
++                 <Link href="/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
+                    + Input Kasus Baru <ArrowRight className="w-3 h-3"/>
+-                 </a>
++                 </Link>
+                </div>
+             </div>

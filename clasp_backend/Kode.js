@@ -1,10 +1,10 @@
 /**
- * BACKEND GOOGLE APPS SCRIPT - PRESENSI SISWA BK (v5.3 - Fix Rekap Semua Tingkat)
+ * BACKEND GOOGLE APPS SCRIPT - PRESENSI SISWA BK (v7.0 - Massive Dummy Injector)
  * -----------------------------------------------------
  */
 
 const CONFIG = {
-  SHEETS: { LOG_PRESENSI: "LogPresensi", PERINGATAN_KASUS: "PeringatanKasus", PENYELESAIAN_KASUS: "PenyelesaianKasus", SISWA_X: "Siswa_X", SISWA_XI: "Siswa_XI", SISWA_XII: "Siswa_XII", BANK_KASUS: "BankKasus" },
+  SHEETS: { LOG_PRESENSI: "LogPresensi", PERINGATAN_KASUS: "PeringatanKasus", PENYELESAIAN_KASUS: "PenyelesaianKasus", SISWA_X: "Siswa_X", SISWA_XI: "Siswa_XI", SISWA_XII: "Siswa_XII", BANK_KASUS: "BankKasus", USERS: "Users" },
   THRESHOLDS: { ALERT_MULTIPLIER: 3, MAX_LEVEL: 4 }
 };
 
@@ -14,9 +14,11 @@ function doGet(e) { try { return Router.handleGetRequest(e.parameter.action, e.p
 const Router = {
   handlePostRequest: function (body) {
     switch (body.action) {
+      case "login": return AuthController.login(body);
       case "saveAttendance": return AttendanceController.save(body);
       case "resolveCase": return CaseController.resolve(body);
       case "saveBankKasus": return BankKasusController.saveBatch(body);
+      case "injectMassiveDummy": return MassiveInjector.run();
       default: return ResponseHelper.error("Action POST tidak dikenali.");
     }
   },
@@ -27,6 +29,7 @@ const Router = {
       case "getRekapBulanan": return AttendanceController.getRekapMatrix(queryParams);
       case "getDashboardStats": return DashboardController.getStats(queryParams);
       case "setupDatabase": return DatabaseSetup.init();
+      case "injectMassiveDummy": return MassiveInjector.run();
       default: return ResponseHelper.error("Action GET tidak dikenali.");
     }
   }
@@ -35,14 +38,93 @@ const Router = {
 const DatabaseSetup = {
   init: function() {
     const ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
-    let sheet = ss.getSheetByName(CONFIG.SHEETS.BANK_KASUS);
-    if (!sheet) {
-      sheet = ss.insertSheet(CONFIG.SHEETS.BANK_KASUS);
-      sheet.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
-      sheet.getRange("A1:G1").setFontWeight("bold").setBackground("#d9d9d9");
-      return ResponseHelper.success(null, "Sheet BankKasus berhasil dibuat!");
+    let sheetKasus = ss.getSheetByName(CONFIG.SHEETS.BANK_KASUS);
+    if (!sheetKasus) {
+      sheetKasus = ss.insertSheet(CONFIG.SHEETS.BANK_KASUS);
+      sheetKasus.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
     }
-    return ResponseHelper.success(null, "Sheet BankKasus sudah ada.");
+    let sheetUsers = ss.getSheetByName(CONFIG.SHEETS.USERS);
+    if (!sheetUsers) {
+      sheetUsers = ss.insertSheet(CONFIG.SHEETS.USERS);
+      sheetUsers.appendRow(["user_id", "username", "password", "nama_lengkap", "role"]);
+      sheetUsers.appendRow([`USR-1`, "admin", "123456", "Guru BK Utama", "ADMIN"]);
+    }
+    return ResponseHelper.success(null, "Database setup selesai!");
+  }
+};
+
+const AuthController = {
+  login: function(body) {
+    try {
+      const { username, password } = body;
+      if (!username || !password) return ResponseHelper.error("Kosong.");
+      const data = SpreadsheetRepository.getSheet(CONFIG.SHEETS.USERS).getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][1]).trim() === String(username).trim() && String(data[i][2]).trim() === String(password).trim()) {
+          return ResponseHelper.success({ token: `TKN-${Date.now()}`, user: { id: data[i][0], username: data[i][1], nama: data[i][3], role: data[i][4] } });
+        }
+      }
+      return ResponseHelper.error("Username/Password salah.");
+    } catch(err) { return ResponseHelper.error(err.message); }
+  }
+};
+
+const MassiveInjector = {
+  run: function() {
+    try {
+      const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
+      const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
+      const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+      
+      // Safety check jika sheet belum diisi
+      if(x.length < 5 || xi.length < 5 || xii.length < 5) return ResponseHelper.error("Data siswa kurang. Isi dulu Sheet Siswa.");
+
+      const timestamp = TimeHelper.getCurrentTimestamp();
+      const randArr = (arr) => arr[Math.floor(Math.random() * arr.length)];
+      
+      // Ambil beberapa siswa random dari tiap tingkat
+      const korbanAlert = [x[0], xi[1], xii[2], x[3], xi[4], xii[5], x[6], xii[7]];
+      const korbanKasus = [xi[0], xii[1], x[2], xi[3], xii[4]];
+      const korbanSelesai = [x[8], xi[8], xii[8]];
+
+      let alertRecords = [];
+      let kasusRecords = [];
+      let selesaiRecords = [];
+
+      // 1. INJECT ACTIVE ALERTS (Level 1 - 4 random)
+      korbanAlert.forEach((s, idx) => {
+         const level = (idx % 4) + 1; // Level 1-4
+         const totalAbsen = level * 3; // 3, 6, 9, 12
+         alertRecords.push([
+           `ALT-MASSIVE-${Date.now()}-${s.nis}`, s.nis, s.nama, s.kelas, level, totalAbsen, "AKTIF", timestamp
+         ]);
+      });
+
+      // 2. INJECT BANK KASUS PELANGGARAN
+      const jenisKasus = ["Merokok di Kantin", "Atribut Tidak Lengkap", "Terlambat Masuk Jam Pertama", "Melompat Pagar Sekolah", "Membawa Ponsel saat Ujian"];
+      korbanKasus.forEach((s, idx) => {
+         kasusRecords.push([
+           `BK-MASSIVE-${Date.now()}-${s.nis}`, TimeHelper.getCurrentDate(), s.nis, s.nama, s.kelas, randArr(jenisKasus), timestamp
+         ]);
+      });
+
+      // 3. INJECT PENYELESAIAN KASUS (Riwayat)
+      korbanSelesai.forEach((s, idx) => {
+         const cat = ["Diberikan SP 1 dan peringatan lisan", "Home visit dilakukan, orang tua menyanggupi pengawasan", "Siswa setuju membuat surat pernyataan bermaterai"];
+         selesaiRecords.push([
+           `RES-MASSIVE-${Date.now()}-${s.nis}`, `ALT-OLD-${s.nis}`, s.nis, s.nama, s.kelas, 
+           "https://drive.google.com/file/d/dummy_pdf/view", randArr(cat), "Bapak Budi (BK)", timestamp
+         ]);
+      });
+
+      if(alertRecords.length > 0) SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PERINGATAN_KASUS, alertRecords);
+      if(kasusRecords.length > 0) SpreadsheetRepository.insertBatch(CONFIG.SHEETS.BANK_KASUS, kasusRecords);
+      if(selesaiRecords.length > 0) SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PENYELESAIAN_KASUS, selesaiRecords);
+
+      return ResponseHelper.success(null, "Massive Injection Berhasil! Silakan cek Dashboard.");
+    } catch(err) {
+      return ResponseHelper.error(err.message);
+    }
   }
 };
 
@@ -148,7 +230,6 @@ const AttendanceController = {
     } catch (error) { return ResponseHelper.error(error.message); }
   },
 
-  // FIX UNTUK "SEMUA" DI SINI
   getRekapMatrix: function(queryParams) {
     try {
       const month = queryParams.month || TimeHelper.getCurrentDate().substring(0, 7); 
@@ -173,7 +254,6 @@ const AttendanceController = {
         
         let logsHarian = {}; 
         let sakit = 0, izin = 0, alpha = 0;
-        
         const cleanSiswaNis = String(siswa.nis).replace(/[^0-9]/g, '');
 
         for(let i=1; i < logs.length; i++) {
@@ -206,14 +286,7 @@ const AttendanceController = {
           }
         }
         
-        rekapResult.push({
-          nis: cleanSiswaNis, 
-          nama: siswa.nama,
-          kelas: siswa.kelas,
-          sakit, izin, alpha,
-          totalTidakHadir: sakit + izin + alpha,
-          dailyLogs: logsHarian
-        });
+        rekapResult.push({ nis: cleanSiswaNis, nama: siswa.nama, kelas: siswa.kelas, sakit, izin, alpha, totalTidakHadir: sakit + izin + alpha, dailyLogs: logsHarian });
       });
       return ResponseHelper.success(rekapResult);
     } catch(error) { return ResponseHelper.error(error.message); }
@@ -274,11 +347,6 @@ const SpreadsheetRepository = {
     let ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
     if (!ss) throw new Error(`Spreadsheet tidak aktif.`);
     let sheet = ss.getSheetByName(sheetName);
-    if (!sheet && sheetName === CONFIG.SHEETS.BANK_KASUS) {
-      sheet = ss.insertSheet(sheetName);
-      sheet.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
-    }
-    if (!sheet) throw new Error(`Tab Sheet '${sheetName}' tidak ditemukan.`);
     return sheet;
   },
 

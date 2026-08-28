@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { AlertTriangle, RefreshCw, ArrowRight, Printer } from "lucide-react";
+import { AlertTriangle, RefreshCw, ArrowRight, Printer, UploadCloud } from "lucide-react";
 import { fetchGasApi } from "@/lib/api";
 
 interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
@@ -104,7 +104,7 @@ export default function SemuaAlertPage() {
           <Table className="text-sm">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
-                <TableHead className="w-[50px] text-center border-r border-gray-200 font-semibold">No</TableHead>
+                <TableHead className="w-[40px] text-center border-r border-gray-200 font-semibold">No</TableHead>
                 <TableHead className="min-w-[200px] border-r border-gray-200 font-semibold">Nama Siswa</TableHead>
                 <TableHead className="text-center border-r border-gray-200 font-semibold">Total Absen</TableHead>
                 <TableHead className="text-center border-r border-gray-200 font-semibold">Level Kasus</TableHead>
@@ -137,27 +137,35 @@ export default function SemuaAlertPage() {
                          </Badge>
                       </TableCell>
                       <TableCell className="text-right pr-4">
-                         <Dialog>
-                          <DialogTrigger >
-                            <Button size="sm" className={`h-8 px-3 gap-1.5 shadow-sm text-xs font-semibold ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-primary text-white'}`}>
-                              Selesaikan <ArrowRight className="w-3 h-3"/>
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-md">
-                            <form onSubmit={(e) => handleUploadResolution(alert.idPeringatan, e)}>
-                              <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
-                              <div className="space-y-4 py-4">
-                                <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2">
-                                  <p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p>
-                                  <Button variant="outline" size="sm" type="button" className="w-fit h-8 text-xs gap-2"><Printer className="w-3 h-3" /> Print Surat Tugas</Button>
+                        <div className="flex items-center justify-end gap-2">
+                           <Button variant="outline" size="sm" className="h-8 px-3 gap-1.5 text-gray-700 border-gray-200 rounded-md text-xs">
+                             <Printer className="w-3.5 h-3.5 hidden sm:block" /><span>Print Surat Tugas</span>
+                           </Button>
+
+                           <Dialog>
+                            <DialogTrigger >
+                              <Button size="sm" className={`h-8 px-3 gap-1.5 font-semibold rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
+                                <span className="hidden sm:inline">Upload Bukti Tindakan</span>
+                                <span className="sm:hidden">Selesaikan</span>
+                                <ArrowRight className="w-3 h-3"/>
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-md">
+                              <form onSubmit={(e) => handleUploadResolution(alert.idPeringatan, e)}>
+                                <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
+                                <div className="space-y-4 py-4">
+                                  <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2">
+                                    <p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p>
+                                    <Button variant="outline" size="sm" type="button" className="w-fit h-8 text-xs gap-2"><Printer className="w-3 h-3" /> Print Surat Tugas</Button>
+                                  </div>
+                                  <div className="space-y-2 pt-2"><Label htmlFor="file">Upload File Bukti (.pdf)</Label><Input id="file" type="file" accept=".pdf" /></div>
+                                  <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                                 </div>
-                                <div className="space-y-2 pt-2"><Label htmlFor="file">Upload File Bukti (.pdf)</Label><Input id="file" type="file" accept=".pdf" /></div>
-                                <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
-                              </div>
-                              <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full sm:w-auto">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
-                            </form>
-                          </DialogContent>
-                        </Dialog>
+                                <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                              </form>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

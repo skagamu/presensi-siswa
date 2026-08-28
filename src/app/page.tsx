@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -176,7 +177,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex justify-between items-end mb-3">
                <h2 className="text-xl font-bold tracking-tight text-gray-900">Priority Alerts Top 3</h2>
-               <a href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</a>
+               <Link href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -278,7 +279,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex justify-between items-end mb-3">
                <h2 className="text-xl font-bold tracking-tight text-gray-900">5 Kasus Terakhir</h2>
-               <a href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</a>
+               <Link href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
             </div>
             
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
@@ -313,9 +314,9 @@ export default function DashboardPage() {
                </div>
 
                <div className="p-3 bg-gray-50 border-t border-gray-100 text-center mt-auto">
-                 <a href="/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
+                 <Link href="/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
                    + Input Kasus Baru <ArrowRight className="w-3 h-3"/>
-                 </a>
+                 </Link>
                </div>
             </div>
 
