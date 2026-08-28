@@ -1,0 +1,11 @@
+--- src/app/presensi/page.tsx
++++ src/app/presensi/page.tsx
+@@ -194,8 +194,7 @@
+           </Table>
+         </div>
+         
+-        <div className="mt-6 flex justify-end px-4 sm:px-0">
++        <div className="border-t border-gray-200 p-4 sm:px-6 sm:py-4 bg-gray-50/50 flex justify-end">
+           <Button 
+             size="lg" 
+             onClick={handleSimpan} 

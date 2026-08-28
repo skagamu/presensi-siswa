@@ -1,0 +1,11 @@
+@@ -248,9 +248,9 @@
+                <div className="bg-orange-50 border-b border-orange-100 px-4 py-3 flex items-center gap-2">
+                  <FileWarning className="w-4 h-4 text-orange-600"/>
+                  <h3 className="font-bold text-orange-900 text-sm">Pelanggaran Disiplin</h3>
+                </div>
+-               <div className="flex flex-col divide-y divide-gray-100">
++               <div className="flex flex-col">
+                   {isLoading ? (
+                     <div className="p-6 text-center text-xs text-gray-400">Memuat kasus...</div>
+                   ) : kasusTerakhir && kasusTerakhir.length > 0 ? (
+                     kasusTerakhir.map((k) => (

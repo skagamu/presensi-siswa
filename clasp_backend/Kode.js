@@ -1,0 +1,362 @@
+/**
+ * BACKEND GOOGLE APPS SCRIPT - PRESENSI SISWA BK (v5.3 - Fix Rekap Semua Tingkat)
+ * -----------------------------------------------------
+ */
+
+const CONFIG = {
+  SHEETS: { LOG_PRESENSI: "LogPresensi", PERINGATAN_KASUS: "PeringatanKasus", PENYELESAIAN_KASUS: "PenyelesaianKasus", SISWA_X: "Siswa_X", SISWA_XI: "Siswa_XI", SISWA_XII: "Siswa_XII", BANK_KASUS: "BankKasus" },
+  THRESHOLDS: { ALERT_MULTIPLIER: 3, MAX_LEVEL: 4 }
+};
+
+function doPost(e) { try { return Router.handlePostRequest(JSON.parse(e.postData.contents)); } catch (err) { return ResponseHelper.error("Server Error POST: " + err.message); } }
+function doGet(e) { try { return Router.handleGetRequest(e.parameter.action, e.parameter); } catch (err) { return ResponseHelper.error("Server Error GET: " + err.message); } }
+
+const Router = {
+  handlePostRequest: function (body) {
+    switch (body.action) {
+      case "saveAttendance": return AttendanceController.save(body);
+      case "resolveCase": return CaseController.resolve(body);
+      case "saveBankKasus": return BankKasusController.saveBatch(body);
+      default: return ResponseHelper.error("Action POST tidak dikenali.");
+    }
+  },
+  handleGetRequest: function (action, queryParams) {
+    switch (action) {
+      case "getStudents": return StudentController.getListGet(queryParams);
+      case "getPriorityAlerts": return CaseController.getAlerts();
+      case "getRekapBulanan": return AttendanceController.getRekapMatrix(queryParams);
+      case "getDashboardStats": return DashboardController.getStats(queryParams);
+      case "setupDatabase": return DatabaseSetup.init();
+      default: return ResponseHelper.error("Action GET tidak dikenali.");
+    }
+  }
+};
+
+const DatabaseSetup = {
+  init: function() {
+    const ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
+    let sheet = ss.getSheetByName(CONFIG.SHEETS.BANK_KASUS);
+    if (!sheet) {
+      sheet = ss.insertSheet(CONFIG.SHEETS.BANK_KASUS);
+      sheet.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
+      sheet.getRange("A1:G1").setFontWeight("bold").setBackground("#d9d9d9");
+      return ResponseHelper.success(null, "Sheet BankKasus berhasil dibuat!");
+    }
+    return ResponseHelper.success(null, "Sheet BankKasus sudah ada.");
+  }
+};
+
+const DashboardController = {
+  getStats: function(queryParams) {
+    try {
+      const targetDate = queryParams.date || TimeHelper.getCurrentDate();
+      const studentsX = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
+      const studentsXI = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
+      const studentsXII = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+      const totalMurid = studentsX.length + studentsXI.length + studentsXII.length;
+      
+      const logs = SpreadsheetRepository.getAllLogs();
+      let absenHariIni = 0; let breakdown = { SAKIT: 0, IZIN: 0, ALPHA: 0 };
+      let weeklyData = {}; let monthlyData = {};
+
+      const todayObj = new Date();
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(todayObj); d.setDate(d.getDate() - i);
+        weeklyData[Utilities.formatDate(d, "Asia/Jakarta", "yyyy-MM-dd")] = 0;
+      }
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(todayObj); d.setMonth(d.getMonth() - i);
+        monthlyData[Utilities.formatDate(d, "Asia/Jakarta", "yyyy-MM")] = 0;
+      }
+
+      for (let i = 1; i < logs.length; i++) {
+        let rowDateStr = "";
+        if(logs[i][1] instanceof Date) rowDateStr = Utilities.formatDate(logs[i][1], "Asia/Jakarta", "yyyy-MM-dd");
+        else rowDateStr = String(logs[i][1]).substring(0,10);
+
+        const stat = String(logs[i][5]).toUpperCase().trim();
+        const isAbsen = ["SAKIT", "IZIN", "ALPHA"].includes(stat);
+
+        if (rowDateStr === targetDate && isAbsen) {
+          if (stat === "SAKIT") breakdown.SAKIT++; else if (stat === "IZIN") breakdown.IZIN++; else if (stat === "ALPHA") breakdown.ALPHA++;
+          absenHariIni++;
+        }
+        if (isAbsen && weeklyData[rowDateStr] !== undefined) weeklyData[rowDateStr]++;
+        const rowMonthStr = rowDateStr.substring(0, 7);
+        if (isAbsen && monthlyData[rowMonthStr] !== undefined) monthlyData[rowMonthStr]++;
+      }
+
+      const hadirHariIni = totalMurid - absenHariIni;
+      let persentase = 100; if (totalMurid > 0) persentase = Math.round((hadirHariIni / totalMurid) * 100);
+
+      const chartWeekly = Object.keys(weeklyData).map(date => {
+         const parts = date.split('-'); return { label: `${parts[2]}/${parts[1]}`, hadir: totalMurid - weeklyData[date], absen: weeklyData[date] };
+      });
+      const chartMonthly = Object.keys(monthlyData).map(month => {
+         const monthNames = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Ags", "Sep", "Okt", "Nov", "Des"];
+         const parts = month.split('-'); const avgAbsen = Math.round(monthlyData[month] / 22); 
+         return { label: `${monthNames[parseInt(parts[1])-1]} ${parts[0]}`, hadir: totalMurid - avgAbsen, absen: avgAbsen };
+      });
+
+      return ResponseHelper.success({ tanggal: targetDate, totalMurid, hadirHariIni, absenHariIni, persentaseKehadiran: persentase, breakdown, chart: { weekly: chartWeekly, monthly: chartMonthly } });
+    } catch (error) { return ResponseHelper.error(error.message); }
+  }
+};
+
+const BankKasusController = {
+  saveBatch: function(body) {
+    try {
+      const { date, pelanggaran, students } = body;
+      const validDate = date || TimeHelper.getCurrentDate();
+      const timestamp = TimeHelper.getCurrentTimestamp();
+      if (!pelanggaran || !students || students.length === 0) return ResponseHelper.error("Data kosong.");
+
+      const recordsToInsert = students.map(s => [ `BK-${new Date().getTime()}-${s.nis}`, validDate, s.nis, s.nama, s.kelas, pelanggaran, timestamp ]);
+      SpreadsheetRepository.insertBatch(CONFIG.SHEETS.BANK_KASUS, recordsToInsert);
+      return ResponseHelper.success(null, `${students.length} data berhasil disimpan.`);
+    } catch (error) { return ResponseHelper.error(error.message); }
+  }
+};
+
+const StudentController = {
+  getListGet: function (queryParams) {
+    try {
+      if (queryParams.tingkat === "SEMUA") {
+        const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
+        const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
+        const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+        return ResponseHelper.success([...x, ...xi, ...xii]);
+      } else {
+        const sheetName = CONFIG.SHEETS[`SISWA_${queryParams.tingkat || "X"}`];
+        return ResponseHelper.success(SpreadsheetRepository.getStudentsBySheet(sheetName));
+      }
+    } catch (error) { return ResponseHelper.error(error.message); }
+  }
+};
+
+const AttendanceController = {
+  save: function (body) {
+    try {
+      const validDate = body.date || TimeHelper.getCurrentDate();
+      const timestamp = TimeHelper.getCurrentTimestamp();
+      const absentStudents = (body.attendances || []).filter(s => s.status_presensi !== "HADIR");
+      if (absentStudents.length > 0) {
+        SpreadsheetRepository.upsertLogAbsence(validDate, absentStudents, timestamp);
+        AlertService.processAbsences(absentStudents, timestamp);
+      }
+      return ResponseHelper.success(null, "Presensi berhasil disimpan.");
+    } catch (error) { return ResponseHelper.error(error.message); }
+  },
+
+  // FIX UNTUK "SEMUA" DI SINI
+  getRekapMatrix: function(queryParams) {
+    try {
+      const month = queryParams.month || TimeHelper.getCurrentDate().substring(0, 7); 
+      const tingkat = queryParams.tingkat || "SEMUA"; 
+      const kelas = queryParams.kelas; 
+      
+      let students = [];
+      if (tingkat === "SEMUA") {
+         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
+         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
+         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+         students = [...x, ...xi, ...xii];
+      } else {
+         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]);
+      }
+      
+      const logs = SpreadsheetRepository.getAllLogs();
+      let rekapResult = [];
+
+      students.forEach(siswa => {
+        if(kelas && siswa.kelas !== kelas && kelas !== "SEMUA") return;
+        
+        let logsHarian = {}; 
+        let sakit = 0, izin = 0, alpha = 0;
+        
+        const cleanSiswaNis = String(siswa.nis).replace(/[^0-9]/g, '');
+
+        for(let i=1; i < logs.length; i++) {
+          const logDateRaw = logs[i][1];
+          let logDateStr = "";
+          
+          if(logDateRaw instanceof Date) {
+            const yyyy = logDateRaw.getFullYear();
+            const mm = String(logDateRaw.getMonth() + 1).padStart(2, '0');
+            const dd = String(logDateRaw.getDate()).padStart(2, '0');
+            logDateStr = `${yyyy}-${mm}-${dd}`;
+          } else {
+            logDateStr = String(logDateRaw).trim();
+            if(logDateStr.includes("/")) {
+                let parts = logDateStr.split("/");
+                if(parts.length === 3 && parts[2].length === 4) logDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+            if(logDateStr.includes("T")) logDateStr = logDateStr.split("T")[0];
+            logDateStr = logDateStr.substring(0, 10);
+          }
+          
+          const cleanLogNis = String(logs[i][2]).replace(/[^0-9]/g, '');
+
+          if(cleanLogNis === cleanSiswaNis && logDateStr.startsWith(month)) {
+            const stat = String(logs[i][5]).toUpperCase().trim();
+            const dateSaja = parseInt(logDateStr.split("-")[2], 10); 
+            
+            logsHarian[dateSaja] = stat;
+            if(stat === "SAKIT") sakit++; else if(stat === "IZIN") izin++; else if(stat === "ALPHA") alpha++;
+          }
+        }
+        
+        rekapResult.push({
+          nis: cleanSiswaNis, 
+          nama: siswa.nama,
+          kelas: siswa.kelas,
+          sakit, izin, alpha,
+          totalTidakHadir: sakit + izin + alpha,
+          dailyLogs: logsHarian
+        });
+      });
+      return ResponseHelper.success(rekapResult);
+    } catch(error) { return ResponseHelper.error(error.message); }
+  }
+};
+
+const CaseController = {
+  getAlerts: function () {
+    try { return ResponseHelper.success(SpreadsheetRepository.getActiveAlerts()); } 
+    catch (error) { return ResponseHelper.error(error.message); }
+  },
+  resolve: function (body) {
+    try {
+      const { id_peringatan, nis, nama, kelas, catatan_konseling, ditangani_oleh, pdfBase64, fileName } = body;
+      const timestamp = TimeHelper.getCurrentTimestamp();
+      const linkPdf = FileService.uploadPdf(pdfBase64, fileName);
+      SpreadsheetRepository.insertRow(CONFIG.SHEETS.PENYELESAIAN_KASUS, [
+        `RES-${new Date().getTime()}`, id_peringatan, nis || "-", nama || "-", 
+        kelas || "-", linkPdf, catatan_konseling || "", ditangani_oleh || "Guru BK", timestamp
+      ]);
+      SpreadsheetRepository.updateAlertStatus(id_peringatan, "SELESAI");
+      return ResponseHelper.success({ linkPdf }, "Kasus diselesaikan.");
+    } catch (error) { return ResponseHelper.error(error.message); }
+  }
+};
+
+const AlertService = {
+  processAbsences: function (absentStudents, timestamp) {
+    const allLogs = SpreadsheetRepository.getAllLogs();
+    absentStudents.forEach(siswa => {
+      let count = 0;
+      const cleanSiswaNis = String(siswa.nis).replace(/[^0-9]/g, '');
+      for (let i = 1; i < allLogs.length; i++) {
+        const cleanLogNis = String(allLogs[i][2]).replace(/[^0-9]/g, '');
+        if (cleanLogNis === cleanSiswaNis && allLogs[i][5] !== "HADIR") count++;
+      }
+      count = count + 1; 
+      if (count > 0 && count % CONFIG.THRESHOLDS.ALERT_MULTIPLIER === 0) {
+        let level = Math.floor(count / CONFIG.THRESHOLDS.ALERT_MULTIPLIER);
+        if (level > CONFIG.THRESHOLDS.MAX_LEVEL) level = CONFIG.THRESHOLDS.MAX_LEVEL;
+        SpreadsheetRepository.insertRow(CONFIG.SHEETS.PERINGATAN_KASUS, [
+          `ALERT-${new Date().getTime()}-${siswa.nis}`, siswa.nis, siswa.nama, siswa.kelas, level, count, "AKTIF", timestamp
+        ]);
+      }
+    });
+  }
+};
+
+const FileService = {
+  uploadPdf: function (base64String, fileName) {
+    if (!base64String || !fileName) return "File tidak dilampirkan";
+    try { return DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64String), 'application/pdf', fileName)).getUrl(); } catch (error) { return "Gagal memproses file base64."; }
+  }
+};
+
+const SpreadsheetRepository = {
+  getSheet: function (sheetName) {
+    let ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
+    if (!ss) throw new Error(`Spreadsheet tidak aktif.`);
+    let sheet = ss.getSheetByName(sheetName);
+    if (!sheet && sheetName === CONFIG.SHEETS.BANK_KASUS) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
+    }
+    if (!sheet) throw new Error(`Tab Sheet '${sheetName}' tidak ditemukan.`);
+    return sheet;
+  },
+
+  getStudentsBySheet: function (sheetName) {
+    try {
+      const data = this.getSheet(sheetName).getDataRange().getValues();
+      const students = [];
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][2] && data[i][3]) students.push({ kelas: data[i][1].toString().trim(), nis: data[i][2].toString().trim(), nama: data[i][3].toString().trim() });
+      }
+      return students;
+    } catch(e) { return []; }
+  },
+  insertRow: function (sheetName, rowData) { this.getSheet(sheetName).appendRow(rowData); },
+  insertBatch: function (sheetName, multiRowData) {
+    if (multiRowData.length === 0) return;
+    const sheet = this.getSheet(sheetName);
+    sheet.getRange(sheet.getLastRow() + 1, 1, multiRowData.length, multiRowData[0].length).setValues(multiRowData);
+  },
+  upsertLogAbsence: function(dateStr, absentStudents, timestamp) {
+    const sheet = this.getSheet(CONFIG.SHEETS.LOG_PRESENSI);
+    const data = sheet.getDataRange().getValues();
+    let recordsToInsert = [];
+    
+    absentStudents.forEach(student => {
+      let isFound = false;
+      const cleanStudentNis = String(student.nis).replace(/[^0-9]/g, '');
+
+      for(let i = data.length - 1; i >= 1; i--) {
+        let rowDateStr = "";
+        if(data[i][1] instanceof Date) {
+            const dt = data[i][1];
+            rowDateStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        } else {
+          rowDateStr = String(data[i][1]);
+          if(rowDateStr.includes("T")) rowDateStr = rowDateStr.split("T")[0];
+        }
+        
+        const cleanLogNis = String(data[i][2]).replace(/[^0-9]/g, '');
+        if(rowDateStr.substring(0,10) === dateStr && cleanLogNis === cleanStudentNis) {
+          sheet.getRange(i + 1, 6).setValue(student.status_presensi);
+          sheet.getRange(i + 1, 8).setValue(timestamp);
+          isFound = true;
+          break;
+        }
+      }
+      if(!isFound) {
+        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, false, timestamp]);
+      }
+    });
+
+    if(recordsToInsert.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, recordsToInsert.length, recordsToInsert[0].length).setValues(recordsToInsert);
+  },
+  getAllLogs: function () { return this.getSheet(CONFIG.SHEETS.LOG_PRESENSI).getDataRange().getValues(); },
+  getActiveAlerts: function () {
+    const data = this.getSheet(CONFIG.SHEETS.PERINGATAN_KASUS).getDataRange().getValues();
+    const alerts = [];
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][6] === "AKTIF") {
+        alerts.push({ idPeringatan: data[i][0], nis: data[i][1], nama: data[i][2], kelas: data[i][3], tingkatKumulatif: data[i][4], totalHariAbsen: data[i][5], status: data[i][6], waktuDibuat: data[i][7] });
+      }
+    }
+    return alerts;
+  },
+  updateAlertStatus: function (id, newStatus) {
+    const sheet = this.getSheet(CONFIG.SHEETS.PERINGATAN_KASUS);
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] === id && data[i][6] === "AKTIF") {
+        sheet.getRange(i + 1, 7).setValue(newStatus);
+        break;
+      }
+    }
+  }
+};
+
+const TimeHelper = { getCurrentDate: () => Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd"), getCurrentTimestamp: () => Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss") };
+const ResponseHelper = {
+  success: function (data, message = "Success") { return ContentService.createTextOutput(JSON.stringify({ status: "success", message, data })).setMimeType(ContentService.MimeType.JSON); },
+  error: function (message) { return ContentService.createTextOutput(JSON.stringify({ status: "error", message })).setMimeType(ContentService.MimeType.JSON); }
+};
