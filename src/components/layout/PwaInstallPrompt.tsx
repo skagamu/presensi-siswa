@@ -46,12 +46,12 @@ export function PwaInstallPrompt() {
     };
   }, []);
 
-  // Auto-dismiss after 5 seconds
+  // Auto-dismiss after 10 seconds
   useEffect(() => {
     if (showPrompt) {
       const timer = setTimeout(() => {
         handleDismiss();
-      }, 5000);
+      }, 10000);
       return () => clearTimeout(timer);
     }
   }, [showPrompt]);
