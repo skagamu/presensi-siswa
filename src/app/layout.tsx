@@ -38,16 +38,19 @@ export default function RootLayout({
         </AuthProvider>
         <Toaster position="top-center" />
         
-        {/* PWA Service Worker Registration */}
+        {/* Clear old PWA cache that can serve stale GitHub Pages bundles. */}
         <script dangerouslySetInnerHTML={{
           __html: `
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/presensi-siswa/sw.js').then(function(registration) {
-                  console.log('PWA ServiceWorker registered');
-                }, function(err) {
-                  console.log('PWA ServiceWorker registration failed: ', err);
+                navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                  registrations.forEach(function(registration) { registration.unregister(); });
                 });
+              });
+            }
+            if ('caches' in window) {
+              caches.keys().then(function(keys) {
+                keys.forEach(function(key) { caches.delete(key); });
               });
             }
           `
