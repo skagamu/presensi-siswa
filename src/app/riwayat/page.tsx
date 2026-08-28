@@ -43,22 +43,22 @@ export default function RiwayatPage() {
   useEffect(() => { fetchHistory(); }, []);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex justify-between items-end mb-6">
+    <div className="max-w-7xl mx-auto space-y-5">
+      <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Riwayat Kasus Selesai</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Riwayat Kasus Selesai</h1>
           <p className="text-muted-foreground mt-1 text-sm">Arsip penanganan kasus dan bukti fisik dokumen (PDF).</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchHistory} disabled={isFetching} className="gap-2 hidden md:flex h-9 border-gray-200">
+        <Button variant="outline" size="sm" onClick={fetchHistory} disabled={isFetching} className="gap-2 hidden md:flex h-9 rounded-md border-gray-200 bg-white shadow-sm">
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
         </Button>
       </div>
 
-      <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER DIV */}
         <div className="bg-white border-b border-gray-200 p-4 sm:px-6 sm:py-5 flex flex-row items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold leading-none flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-500"/> Arsip Penyelesaian Kasus</h3>
+            <h3 className="text-lg font-semibold leading-none flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-green-500"/> Arsip Penyelesaian Kasus</h3>
             <p className="text-sm text-gray-500 mt-1">Menampilkan {history.length} kasus yang berhasil ditutup.</p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchHistory} disabled={isFetching} className="md:hidden h-8 w-8 p-0 border-gray-200">
@@ -67,7 +67,31 @@ export default function RiwayatPage() {
         </div>
 
         {/* CONTENT DIV */}
-        <div className="flex-1 overflow-x-auto min-h-[400px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
+          {isFetching ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data arsip...</div>
+          ) : history.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Belum ada kasus yang diselesaikan.</div>
+          ) : (
+            history.map((h) => (
+              <div key={h.idPenyelesaian} className="p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-950 leading-snug">{h.nama}</div>
+                    <div className="mt-1 text-[11px] text-gray-500">{h.kelas}</div>
+                  </div>
+                  <div className="shrink-0 text-[11px] font-medium text-gray-500">{String(h.waktuSelesai).substring(0, 16)}</div>
+                </div>
+                <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">{h.catatan}</div>
+                <a href={h.linkPdf} target="_blank" rel="noreferrer" className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-md border border-gray-200 bg-white text-xs font-semibold text-gray-700">
+                  <FileText className="w-3.5 h-3.5"/> Lihat PDF
+                </a>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[400px]">
           <Table className="text-sm">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
@@ -89,7 +113,7 @@ export default function RiwayatPage() {
                     <TableCell className="text-center text-muted-foreground font-medium border-r border-gray-200">{idx + 1}</TableCell>
                     <TableCell className="border-r border-gray-200">
                        <div className="font-semibold text-gray-900">{h.nama}</div>
-                       <div className="text-[11px] text-gray-500 mt-0.5">{h.kelas} • NIS {h.nis}</div>
+                       <div className="text-[11px] text-gray-500 mt-0.5">{h.kelas}</div>
                     </TableCell>
                     <TableCell className="border-r border-gray-200">
                        <div className="text-xs text-gray-700 font-medium">"{h.catatan}"</div>

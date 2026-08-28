@@ -81,6 +81,11 @@ export default function PresensiHarianPage() {
   }, [tingkat]);
 
   const filterSiswa = semuaSiswa.filter(s => s.kelas === kelas);
+  const summary = filterSiswa.reduce((acc, siswa) => {
+    const status = statusSiswa[siswa.nis] || "HADIR";
+    acc[status] += 1;
+    return acc;
+  }, { HADIR: 0, SAKIT: 0, IZIN: 0, ALPHA: 0 } as Record<StatusAbsen, number>);
 
   const handleSimpan = async () => {
     if(filterSiswa.length === 0) return toast.error("Tidak ada siswa.");
@@ -110,18 +115,27 @@ export default function PresensiHarianPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Input Presensi Harian</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Input Presensi Harian</h1>
         <p className="text-muted-foreground mt-1 text-sm">Default status siswa adalah HADIR. Klik opsi untuk mengubah.</p>
       </div>
 
-      <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="grid grid-cols-4 gap-2">
+        {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((status) => (
+          <div key={status} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
+            <div className="text-[10px] font-semibold text-gray-500">{status}</div>
+            <div className="mt-1 text-xl font-semibold text-gray-950">{summary[status]}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER */}
         <div className="border-b border-gray-200 px-4 sm:px-6 pt-4 sm:pt-6 pb-0 flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4 items-start justify-between pb-4">
             <div>
-              <h3 className="text-lg font-bold leading-none">Daftar Siswa</h3>
+              <h3 className="text-lg font-semibold leading-none">Daftar Siswa</h3>
             </div>
             
             <div className="flex gap-2 w-full md:w-auto items-center justify-between md:justify-end">
@@ -175,7 +189,37 @@ export default function PresensiHarianPage() {
         </div>
 
         {/* CONTENT */}
-        <div className="flex-1 overflow-x-auto min-h-[300px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[300px]">
+          {isFetching ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Sedang memuat data...</div>
+          ) : filterSiswa.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Tidak ada data siswa untuk kelas {kelas || '(Belum dipilih)'}.</div>
+          ) : (
+            filterSiswa.map((siswa, i) => {
+              const status = statusSiswa[siswa.nis];
+              return (
+                <div key={siswa.nis} className="p-3 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-gray-100 text-xs font-semibold text-gray-600">{i + 1}</div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold leading-snug text-gray-950">{siswa.nama}</div>
+                      <div className="text-[11px] text-gray-500">{siswa.kelas}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-4 gap-1 rounded-md bg-gray-100 p-1">
+                    {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((item) => (
+                      <button key={item} onClick={() => setStatus(siswa.nis, item)} className={`h-9 rounded text-[11px] font-semibold transition-all ${status === item ? "bg-white text-gray-950 shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}>
+                        {item === "HADIR" ? "Hadir" : item === "SAKIT" ? "Sakit" : item === "IZIN" ? "Izin" : "Alpha"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[300px]">
           <Table>
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
@@ -231,7 +275,8 @@ export default function PresensiHarianPage() {
         </div>
         
         {/* FOOTER */}
-        <div className="border-t border-gray-200 p-4 sm:px-6 sm:py-4 bg-gray-50/50 flex justify-end">
+        <div className="sticky bottom-16 md:bottom-0 border-t border-gray-200 p-3 sm:px-6 sm:py-4 bg-white/95 backdrop-blur flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="text-xs text-gray-500">Tidak hadir: <span className="font-semibold text-gray-950">{summary.SAKIT + summary.IZIN + summary.ALPHA}</span></div>
           <Button 
             size="lg" 
             onClick={handleSimpan} 

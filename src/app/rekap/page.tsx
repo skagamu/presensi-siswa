@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { fetchGasApiGet } from "@/lib/api";
+import { Copy } from "lucide-react";
 
 interface RekapRow { nis: string; nama: string; kelas: string; sakit: number; izin: number; alpha: number; totalTidakHadir: number; dailyLogs: Record<string, string>; }
 
@@ -93,6 +94,52 @@ export default function RekapitulasiMatrixPage() {
     return filtered;
   }, [dataRekap, kelasFilter, statusFilter, mode, tanggalHarian]);
 
+  const absentDailyData = useMemo(() => {
+    const dateInt = parseInt(tanggalHarian.split("-")[2], 10);
+    return displayedData
+      .map((siswa) => ({ ...siswa, statusHarian: (siswa.dailyLogs[String(dateInt)] || "HADIR").toUpperCase().trim() }))
+      .filter((siswa) => ["SAKIT", "IZIN", "ALPHA"].includes(siswa.statusHarian));
+  }, [displayedData, tanggalHarian]);
+
+  const absentSummary = useMemo(() => {
+    return absentDailyData.reduce((acc, siswa) => {
+      acc[siswa.statusHarian as "SAKIT" | "IZIN" | "ALPHA"] += 1;
+      return acc;
+    }, { SAKIT: 0, IZIN: 0, ALPHA: 0 });
+  }, [absentDailyData]);
+
+  const formattedTanggalHarian = useMemo(() => {
+    return new Intl.DateTimeFormat("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(`${tanggalHarian}T00:00:00`));
+  }, [tanggalHarian]);
+
+  const absentByTingkat = useMemo(() => {
+    const getLevel = (kelas: string) => kelas.split(" ")[0];
+    return ["X", "XI", "XII"].map((level) => ({
+      level,
+      students: absentDailyData.filter((siswa) => getLevel(siswa.kelas || "") === level),
+    })).filter((group) => group.students.length > 0);
+  }, [absentDailyData]);
+
+  const copyDailyAbsence = async () => {
+    const title = `Rekap Tidak Hadir - ${formattedTanggalHarian}`;
+    const scope = `Tingkat: ${tingkat}${kelasFilter !== "SEMUA" ? ` | Kelas: ${kelasFilter}` : ""}`;
+    const filter = `Filter: ${statusFilter}`;
+    const total = `Total: ${absentDailyData.length} siswa (Sakit ${absentSummary.SAKIT}, Izin ${absentSummary.IZIN}, Alpha ${absentSummary.ALPHA})`;
+    const rows = absentByTingkat.flatMap((group) => [
+      `Kelas ${group.level}`,
+      ...group.students.map((siswa, index) => `${index + 1}. ${siswa.nama} - ${siswa.kelas} - ${siswa.statusHarian}`),
+      "",
+    ]);
+    const text = [title, scope, filter, total, "", ...rows].join("\n").trim();
+    await navigator.clipboard.writeText(text);
+    toast.success("Rekap harian disalin.");
+  };
+
   const renderCellContent = (statusDariDB: string, day: number) => {
     let isMasaDepan = false;
     if (bulan > currentMonthStr) isMasaDepan = true;
@@ -109,15 +156,56 @@ export default function RekapitulasiMatrixPage() {
   };
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-5">
       <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Laporan Presensi</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Laporan Presensi</h1>
           <p className="text-muted-foreground mt-1 text-sm">Pantau kehadiran siswa berdasarkan mode waktu dan filter status.</p>
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      {mode === "HARIAN" && (
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-gray-200 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-5">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-gray-950">Rekap Tidak Hadir</h2>
+              <p className="mt-1 text-sm text-gray-500">{formattedTanggalHarian} • {tingkat}{kelasFilter !== "SEMUA" ? ` • ${kelasFilter}` : ""}</p>
+            </div>
+            <Button onClick={copyDailyAbsence} disabled={absentDailyData.length === 0} className="h-9 rounded-md text-xs font-semibold">
+              <Copy className="mr-2 h-3.5 w-3.5" /> Salin Teks
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 border-b border-gray-100 p-4 text-center sm:px-6">
+            <div className="rounded-md bg-blue-50 p-2 text-xs font-semibold text-blue-700">Sakit<br/><span className="text-base text-blue-900">{absentSummary.SAKIT}</span></div>
+            <div className="rounded-md bg-yellow-50 p-2 text-xs font-semibold text-yellow-700">Izin<br/><span className="text-base text-yellow-900">{absentSummary.IZIN}</span></div>
+            <div className="rounded-md bg-red-50 p-2 text-xs font-semibold text-red-700">Alpha<br/><span className="text-base text-red-900">{absentSummary.ALPHA}</span></div>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {isFetching ? (
+              <div className="p-6 text-center text-sm text-muted-foreground">Mencari data harian...</div>
+            ) : absentDailyData.length === 0 ? (
+              <div className="p-6 text-center text-sm text-green-600">Tidak ada siswa tidak hadir pada filter ini.</div>
+            ) : (
+              absentByTingkat.map((group) => (
+                <div key={`share-${group.level}`} className="divide-y divide-gray-100">
+                  <div className="bg-gray-50 px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-500 sm:px-6">Kelas {group.level}</div>
+                  {group.students.map((siswa, index) => (
+                    <div key={`share-${siswa.nis}`} className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-gray-950">{index + 1}. {siswa.nama}</div>
+                        <div className="mt-0.5 text-[11px] text-gray-500">{siswa.kelas}</div>
+                      </div>
+                      <Badge variant="outline" className={`shrink-0 whitespace-nowrap ${siswa.statusHarian === "SAKIT" ? "bg-blue-50 text-blue-700 border-blue-200" : siswa.statusHarian === "IZIN" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : "bg-red-50 text-red-700 border-red-200"}`}>{siswa.statusHarian}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER */}
         <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-0 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3">
@@ -181,7 +269,42 @@ export default function RekapitulasiMatrixPage() {
         </div>
         
         {/* CONTENT */}
-        <div className="flex-1 overflow-x-auto min-h-[400px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
+          {isFetching ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data ke Spreadsheet...</div>
+          ) : displayedData.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Tidak ada siswa yang sesuai dengan filter.</div>
+          ) : (
+            displayedData.map((siswa) => {
+              const dateInt = parseInt(tanggalHarian.split("-")[2], 10);
+              const statusHarian = (siswa.dailyLogs[String(dateInt)] || "HADIR").toUpperCase().trim();
+              return (
+                <div key={siswa.nis} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold leading-snug text-gray-950">{siswa.nama}</div>
+                      <div className="mt-1 text-[11px] text-gray-500">{siswa.kelas}</div>
+                    </div>
+                    {mode === "BULANAN" ? (
+                      <Badge variant="outline" className="shrink-0 whitespace-nowrap bg-white text-red-700 border-red-200">{siswa.totalTidakHadir} Absen</Badge>
+                    ) : (
+                      <Badge variant="outline" className={`shrink-0 whitespace-nowrap ${statusHarian === "SAKIT" ? "bg-blue-50 text-blue-700 border-blue-200" : statusHarian === "IZIN" ? "bg-yellow-50 text-yellow-700 border-yellow-200" : statusHarian === "ALPHA" ? "bg-red-50 text-red-700 border-red-200" : "bg-green-50 text-green-700 border-green-200"}`}>{statusHarian}</Badge>
+                    )}
+                  </div>
+                  {mode === "BULANAN" && (
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-md bg-blue-50 p-2 text-xs font-semibold text-blue-700">Sakit<br/><span className="text-base text-blue-900">{siswa.sakit}</span></div>
+                      <div className="rounded-md bg-yellow-50 p-2 text-xs font-semibold text-yellow-700">Izin<br/><span className="text-base text-yellow-900">{siswa.izin}</span></div>
+                      <div className="rounded-md bg-red-50 p-2 text-xs font-semibold text-red-700">Alpha<br/><span className="text-base text-red-900">{siswa.alpha}</span></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[400px]">
           <Table className="text-xs sm:text-sm border-collapse">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>

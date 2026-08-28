@@ -92,13 +92,13 @@ export default function BankKasusInputPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Input Bank Kasus</h1>
+        <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Input Bank Kasus</h1>
         <p className="text-muted-foreground mt-1 text-sm">Catat pelanggaran kedisiplinan (Merokok, Terlambat, Atribut, dll) secara massal.</p>
       </div>
 
-      <div className="bg-orange-50/50 border sm:border border-orange-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="bg-white border border-orange-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         <div className="px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-4">
            <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 space-y-2">
@@ -111,20 +111,20 @@ export default function BankKasusInputPage() {
               </div>
            </div>
            
-           <div className="pt-4 mt-2 flex justify-between items-center border-t border-orange-200/60">
+           <div className="pt-4 mt-2 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-t border-orange-200/60">
              <span className="text-sm font-medium text-orange-800">{selectedNis.length} siswa terpilih</span>
-             <Button onClick={handleSimpan} disabled={isSaving || selectedNis.length === 0 || !pelanggaran} className="bg-orange-600 hover:bg-orange-700 text-white font-bold h-9">
+             <Button onClick={handleSimpan} disabled={isSaving || selectedNis.length === 0 || !pelanggaran} className="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white font-bold h-9 rounded-md">
                 {isSaving ? "Menyimpan..." : "Simpan Pelanggaran"}
              </Button>
            </div>
         </div>
       </div>
 
-      <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         <div className="border-b border-gray-200 px-4 sm:px-6 pt-4 sm:pt-6 pb-0 flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4 items-start justify-between pb-4">
             <div className="space-y-1">
-              <h3 className="text-lg font-bold leading-none">Pilih Siswa Pelanggar</h3>
+              <h3 className="text-lg font-semibold leading-none">Pilih Siswa Pelanggar</h3>
             </div>
             
             <div className="flex gap-2 w-full md:w-auto items-center justify-between md:justify-end">
@@ -162,7 +162,28 @@ export default function BankKasusInputPage() {
           )}
         </div>
 
-        <div className="flex-1 overflow-x-auto min-h-[300px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[300px]">
+          {isFetchingSiswa ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Sedang memuat data siswa...</div>
+          ) : filterSiswa.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Tidak ada data siswa.</div>
+          ) : (
+            filterSiswa.map((siswa) => {
+              const isSelected = selectedNis.includes(siswa.nis);
+              return (
+                <button key={siswa.nis} onClick={() => toggleSiswa(siswa.nis)} className={`flex items-center gap-3 p-4 text-left transition-colors ${isSelected ? 'bg-orange-50' : 'bg-white'}`}>
+                  <Checkbox checked={isSelected} onCheckedChange={() => toggleSiswa(siswa.nis)} onClick={(e) => e.stopPropagation()} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold leading-snug text-gray-950">{siswa.nama}</div>
+                    <div className="mt-1 text-[11px] text-gray-500">{siswa.kelas}</div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[300px]">
           <Table>
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
@@ -170,14 +191,13 @@ export default function BankKasusInputPage() {
                   <Checkbox checked={filterSiswa.length > 0 && selectedNis.length === filterSiswa.length} onCheckedChange={toggleSemuaSiswa}/>
                 </TableHead>
                 <TableHead className="min-w-[150px] font-medium border-r border-gray-200">Nama Siswa</TableHead>
-                <TableHead className="w-[100px] text-center font-medium">NIS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isFetchingSiswa ? (
-                <TableRow><TableCell colSpan={3} className="h-48 text-center text-muted-foreground">Sedang memuat data siswa...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={2} className="h-48 text-center text-muted-foreground">Sedang memuat data siswa...</TableCell></TableRow>
               ) : filterSiswa.length === 0 ? (
-                <TableRow><TableCell colSpan={3} className="h-48 text-center text-muted-foreground">Tidak ada data siswa.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={2} className="h-48 text-center text-muted-foreground">Tidak ada data siswa.</TableCell></TableRow>
               ) : (
                 filterSiswa.map((siswa) => {
                   const isSelected = selectedNis.includes(siswa.nis);
@@ -193,7 +213,6 @@ export default function BankKasusInputPage() {
                       <TableCell className="border-r border-gray-200">
                         <div className="font-semibold text-gray-900 leading-tight">{siswa.nama}</div>
                       </TableCell>
-                      <TableCell className="text-center text-sm text-gray-500">{siswa.nis}</TableCell>
                     </TableRow>
                   );
                 })

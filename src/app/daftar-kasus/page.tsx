@@ -53,22 +53,22 @@ export default function DaftarKasusPage() {
   useEffect(() => { fetchDaftarKasus(); }, []);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex justify-between items-end mb-6">
+    <div className="max-w-7xl mx-auto space-y-5">
+      <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Daftar Bank Kasus</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Daftar Bank Kasus</h1>
           <p className="text-muted-foreground mt-1 text-sm">Seluruh catatan pelanggaran kedisiplinan siswa (Merokok, dll).</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchDaftarKasus} disabled={isFetchingKasus} className="gap-2 hidden md:flex h-9 border-gray-200">
+        <Button variant="outline" size="sm" onClick={fetchDaftarKasus} disabled={isFetchingKasus} className="gap-2 hidden md:flex h-9 rounded-md border-gray-200 bg-white shadow-sm">
           <RefreshCw className={`w-4 h-4 ${isFetchingKasus ? 'animate-spin' : ''}`} /> Refresh
         </Button>
       </div>
 
-      <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER DIV */}
         <div className="bg-white border-b border-gray-200 p-4 sm:px-6 sm:py-5 flex flex-row items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold leading-none flex items-center gap-2"><FileWarning className="w-5 h-5 text-orange-500"/> Riwayat Pelanggaran</h3>
+            <h3 className="text-lg font-semibold leading-none flex items-center gap-2"><FileWarning className="w-5 h-5 text-orange-500"/> Riwayat Pelanggaran</h3>
             <p className="text-sm text-gray-500 mt-1">Total ada {dataKasus.length} catatan pelanggaran di database.</p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchDaftarKasus} disabled={isFetchingKasus} className="md:hidden h-8 w-8 p-0 border-gray-200">
@@ -77,7 +77,35 @@ export default function DaftarKasusPage() {
         </div>
 
         {/* CONTENT DIV */}
-        <div className="flex-1 overflow-x-auto min-h-[400px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
+          {isFetchingKasus ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data pelanggaran...</div>
+          ) : dataKasus.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Belum ada pelanggaran yang dicatat.</div>
+          ) : (
+            dataKasus.map((kasus) => {
+              let formattedDate = String(kasus.tanggal);
+              if(formattedDate.includes(",")) {
+                const pts = formattedDate.split(",");
+                if(pts.length >= 3) formattedDate = `${pts[0]}-${(parseInt(pts[1]) + 1).toString().padStart(2,'0')}-${pts[2].toString().padStart(2,'0')}`;
+              }
+              return (
+                <div key={kasus.idKasus} className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-950 leading-snug">{kasus.nama}</div>
+                      <div className="mt-1 text-[11px] text-gray-500">{kasus.kelas}</div>
+                    </div>
+                    <div className="shrink-0 text-[11px] font-medium text-gray-500">{formattedDate.substring(0, 10)}</div>
+                  </div>
+                  <div className="rounded-md border border-orange-100 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800">{kasus.pelanggaran}</div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[400px]">
           <Table className="text-sm">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
@@ -108,7 +136,7 @@ export default function DaftarKasusPage() {
                       <TableCell className="text-center text-muted-foreground font-medium border-r border-gray-200">{idx + 1}</TableCell>
                       <TableCell className="border-r border-gray-200">
                         <div className="font-semibold text-gray-900">{kasus.nama}</div>
-                        <div className="text-[11px] text-gray-500 mt-0.5">{kasus.kelas} • NIS {kasus.nis}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">{kasus.kelas}</div>
                       </TableCell>
                       <TableCell className="border-r border-gray-200">
                         <div className="text-sm text-gray-800 font-medium">{kasus.pelanggaran}</div>

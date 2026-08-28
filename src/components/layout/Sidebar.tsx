@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, CalendarDays, Archive, FileWarning, ListTodo } from "lucide-react";
+import { Archive, LayoutDashboard, Users, CalendarDays, FileWarning, ListTodo, MoreHorizontal } from "lucide-react";
+import { useState } from "react";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   const groups = [
     { label: "Utama", links: [
@@ -23,6 +25,18 @@ export function Sidebar() {
     ]},
   ];
   const navLinks = groups.flatMap((group) => group.links);
+  const mobileLinks = [
+    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Presensi", href: "/presensi", icon: Users },
+    { name: "Alert", href: "/semua-alert", icon: ListTodo },
+    { name: "Rekap", href: "/rekap", icon: CalendarDays },
+    { name: "Lainnya", href: "#", icon: MoreHorizontal },
+  ];
+  const moreLinks = [
+    { name: "Bank Kasus", href: "/bank-kasus", icon: FileWarning },
+    { name: "Daftar Kasus", href: "/daftar-kasus", icon: ListTodo },
+    { name: "Riwayat", href: "/riwayat", icon: Archive },
+  ];
 
   return (
     <>
@@ -67,21 +81,59 @@ export function Sidebar() {
       </aside>
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] pb-safe overflow-x-auto scrollbar-hide">
-        <nav className="flex items-center h-16 min-w-[360px]">
-          {navLinks.map((link) => {
-            const isActive = pathname === link.href;
+      {isMoreOpen && (
+        <button
+          type="button"
+          aria-label="Tutup menu lainnya"
+          className="md:hidden fixed inset-0 z-40 bg-black/20"
+          onClick={() => setIsMoreOpen(false)}
+        />
+      )}
+      {isMoreOpen && (
+        <div className="md:hidden fixed bottom-20 left-3 right-3 z-50 rounded-md border border-gray-200 bg-white p-2 shadow-lg">
+          <div className="px-3 pb-2 pt-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">Menu Lainnya</div>
+          {moreLinks.map((link) => {
             const Icon = link.icon;
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMoreOpen(false)}
+                className={`flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium ${isActive ? "bg-gray-950 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+              >
+                <Icon className={`h-4 w-4 ${isActive ? "text-white" : "text-gray-500"}`} />
+                {link.name}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.35)] backdrop-blur">
+        <nav className="grid h-16 grid-cols-5 px-1">
+          {mobileLinks.map((link) => {
+            const isActive = pathname === link.href || (link.name === "Lainnya" && ["/bank-kasus", "/daftar-kasus", "/riwayat"].includes(pathname));
+            const Icon = link.icon;
+            if (link.name === "Lainnya") {
+              return (
+                <button key={link.name} type="button" onClick={() => setIsMoreOpen((value) => !value)} className="flex flex-col items-center justify-center gap-1 px-1">
+                  <div className={`flex h-7 w-10 items-center justify-center rounded-md ${isActive || isMoreOpen ? 'bg-gray-950' : ''}`}>
+                    <Icon className={`w-4 h-4 ${isActive || isMoreOpen ? "text-white" : "text-gray-500"}`} />
+                  </div>
+                  <span className={`text-[10px] font-medium leading-none ${isActive || isMoreOpen ? "text-gray-950" : "text-gray-500"}`}>Lainnya</span>
+                </button>
+              );
+            }
             return (
               <Link 
                 key={link.href} 
                 href={link.href}
-                className="flex flex-col items-center justify-center flex-1 px-2 space-y-1"
+                className="flex flex-col items-center justify-center gap-1 px-1"
               >
-                <div className={`p-1 rounded-full ${isActive ? 'bg-primary/10' : ''}`}>
-                  <Icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-gray-500"}`} />
+                <div className={`flex h-7 w-10 items-center justify-center rounded-md ${isActive ? 'bg-gray-950' : ''}`}>
+                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-gray-500"}`} />
                 </div>
-                <span className={`text-[10px] font-medium whitespace-nowrap ${isActive ? "text-primary" : "text-gray-500"}`}>
+                <span className={`text-[10px] font-medium leading-none ${isActive ? "text-gray-950" : "text-gray-500"}`}>
                   {link.name}
                 </span>
               </Link>

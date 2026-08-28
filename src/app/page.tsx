@@ -117,54 +117,55 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto space-y-5">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
-        <div>
+    <div className="max-w-7xl mx-auto space-y-4 md:space-y-5">
+      <div className="mb-4 flex items-start justify-between gap-3 md:mb-5 md:items-end">
+        <div className="min-w-0">
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Dashboard BK</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Ikhtisar harian kedisiplinan & presensi siswa sekolah.</p>
+          <p className="text-muted-foreground mt-1 text-xs md:text-sm">Ikhtisar harian kedisiplinan & presensi siswa sekolah.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchDashboardData} disabled={isLoading} className="gap-2 w-fit rounded-md border-gray-200 bg-white shadow-sm">
+        <Button variant="outline" size="sm" onClick={fetchDashboardData} disabled={isLoading} className="h-9 shrink-0 gap-2 rounded-md border-gray-200 bg-white px-3 shadow-sm">
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          {isLoading ? "Refreshing..." : "Refresh"}
+          <span className="hidden sm:inline">{isLoading ? "Refreshing..." : "Refresh"}</span>
         </Button>
       </div>
 
       {/* TOP WIDGET STATS - REFACTORED TO NATIVE DIVS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-3">
         
-        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-2 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total Siswa</h3>
             <Users className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl font-semibold text-gray-900">{stats ? stats.totalMurid : "..."}</div>
+          <div className="text-xl md:text-2xl font-semibold text-gray-900">{stats ? stats.totalMurid : "..."}</div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-2 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</h3>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
-          <div className="text-2xl font-semibold text-green-600">{stats ? stats.hadirHariIni : "..."}</div>
+          <div className="text-xl md:text-2xl font-semibold text-green-600">{stats ? stats.hadirHariIni : "..."}</div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-1 min-h-[104px]">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-1 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Absen Hari Ini</h3>
             <XCircle className="w-4 h-4 text-red-500" />
           </div>
-          <div className="flex items-end gap-2 mt-1">
-            <div className="text-2xl font-semibold text-red-600 leading-none">{stats ? stats.absenHariIni : "..."}</div>
-            <span className="text-[10px] sm:text-xs text-muted-foreground pb-0.5">{stats ? `(S:${stats.breakdown.SAKIT} I:${stats.breakdown.IZIN} A:${stats.breakdown.ALPHA})` : ""}</span>
+          <div className="flex flex-col items-start gap-1 mt-1 md:flex-row md:items-end md:gap-2">
+            <div className="text-xl md:text-2xl font-semibold text-red-600 leading-none">{stats ? stats.absenHariIni : "..."}</div>
+            <span className="text-[10px] sm:text-xs text-muted-foreground md:pb-0.5">{stats ? `S:${stats.breakdown.SAKIT} I:${stats.breakdown.IZIN} A:${stats.breakdown.ALPHA}` : ""}</span>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-2 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">% Kehadiran</h3>
-            <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${stats && stats.persentaseKehadiran < 90 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Tgt &gt; 95%</div>
+            <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
-          <div className="text-2xl font-semibold text-gray-900">{stats ? `${stats.persentaseKehadiran}%` : "..."}</div>
+          <div className="text-xl md:text-2xl font-semibold text-gray-900">{stats ? `${stats.persentaseKehadiran}%` : "..."}</div>
+          <div className={`w-fit text-[10px] font-bold px-2 py-0.5 rounded-full ${stats && stats.persentaseKehadiran < 90 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Tgt &gt; 95%</div>
         </div>
       </div>
 
@@ -175,7 +176,7 @@ export default function DashboardPage() {
         <div className="xl:col-span-8 space-y-5">
           
           <div>
-            <div className="flex justify-between items-end mb-3">
+            <div className="flex justify-between items-end mb-2.5 md:mb-3">
                <h2 className="text-lg font-semibold tracking-tight text-gray-950">Priority Alerts Top 3</h2>
                <Link href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
             </div>
@@ -192,7 +193,7 @@ export default function DashboardPage() {
                   const isCritical = alert.tingkatKumulatif >= 3;
                   return (
                     // RIBBON ALERT (Murni HTML DIV Tanpa Komponen Card Shadcn)
-                    <div key={alert.idPeringatan} className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 sm:px-4 sm:py-3 rounded-md border transition-all gap-2 sm:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
+                    <div key={alert.idPeringatan} className={`flex flex-col md:flex-row md:items-center justify-between px-3 py-3 md:px-4 rounded-md border transition-all gap-3 md:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
                       <div className="flex items-center gap-3 flex-1">
                         <div className={`p-1.5 sm:p-2 rounded-md flex-shrink-0 ${isCritical ? 'bg-red-50 text-red-500' : 'bg-orange-50 text-orange-500'}`}>
                           <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -206,14 +207,14 @@ export default function DashboardPage() {
                           <p className={`text-[11px] sm:text-xs mt-1 font-medium ${isCritical ? 'text-red-700' : 'text-gray-500'}`}>Level {alert.tingkatKumulatif} — Rekomendasi: {getTindakanInfo(alert.tingkatKumulatif)}</p>
                         </div>
                       </div>
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2 md:mt-0 pt-3 md:pt-0 border-t md:border-t-0 border-gray-100 w-full sm:w-auto">
-                        <Button variant="outline" size="sm" className="w-full sm:w-auto h-9 sm:h-8 px-3 gap-1.5 text-gray-700 border-gray-200 rounded-md text-xs sm:text-sm">
-                          <Printer className="w-3.5 h-3.5 hidden sm:block" /><span>Print Surat Tugas</span>
+                      <div className="grid grid-cols-2 md:flex md:items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 w-full md:w-auto">
+                        <Button variant="outline" size="sm" className="h-9 md:h-8 px-3 gap-1.5 text-gray-700 border-gray-200 rounded-md text-xs sm:text-sm">
+                          <Printer className="w-3.5 h-3.5" /><span className="truncate">Surat</span>
                         </Button>
                         <Dialog>
-                          <DialogTrigger >
-                            <Button size="sm" className={`w-full sm:w-auto h-9 sm:h-8 px-3 gap-1.5 font-semibold rounded-md text-xs sm:text-sm ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
-                              <span>Upload Bukti Tindakan</span><ArrowRight className="w-3.5 h-3.5" />
+                          <DialogTrigger asChild>
+                            <Button size="sm" className={`h-9 md:h-8 px-3 gap-1.5 font-semibold rounded-md text-xs sm:text-sm ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
+                              <span className="truncate">Upload Bukti</span><ArrowRight className="w-3.5 h-3.5" />
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="sm:max-w-md">

@@ -59,7 +59,7 @@ export default function SemuaAlertPage() {
   const handleUploadResolution = async (idPeringatan: string, e: React.FormEvent) => {
     e.preventDefault();
     setIsUploading(idPeringatan);
-    const notes = (document.getElementById(`notes-${idPeringatan}`) as HTMLTextAreaElement).value;
+    const notes = (e.currentTarget.querySelector("textarea") as HTMLTextAreaElement | null)?.value || "";
 
     try {
       const res = await fetchGasApi("resolveCase", { id_peringatan: idPeringatan, catatan_konseling: notes || "Diselesaikan", ditangani_oleh: "Guru BK", fileName: "bukti.pdf", pdfBase64: "dummy" });
@@ -76,22 +76,22 @@ export default function SemuaAlertPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex justify-between items-end mb-6">
+    <div className="max-w-7xl mx-auto space-y-5">
+      <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Semua Antrean Alert</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Semua Antrean Alert</h1>
           <p className="text-muted-foreground mt-1 text-sm">Daftar lengkap seluruh siswa yang membutuhkan intervensi BK.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchAlerts} disabled={isFetching} className="gap-2 hidden md:flex h-9 border-gray-200">
+        <Button variant="outline" size="sm" onClick={fetchAlerts} disabled={isFetching} className="gap-2 hidden md:flex h-9 rounded-md border-gray-200 bg-white shadow-sm">
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} /> Refresh
         </Button>
       </div>
 
-      <div className="bg-white border sm:border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+      <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER DIV */}
         <div className="bg-white border-b border-gray-200 p-4 sm:px-6 sm:py-5 flex flex-row items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold leading-none flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-500"/> Daftar Lengkap Peringatan Aktif</h3>
+            <h3 className="text-lg font-semibold leading-none flex items-center gap-2"><AlertTriangle className="w-5 h-5 text-red-500"/> Daftar Lengkap Peringatan Aktif</h3>
             <p className="text-sm text-gray-500 mt-1">Menampilkan {alerts.length} kasus belum tertangani.</p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchAlerts} disabled={isFetching} className="md:hidden h-8 w-8 p-0 border-gray-200">
@@ -100,14 +100,60 @@ export default function SemuaAlertPage() {
         </div>
 
         {/* CONTENT DIV */}
-        <div className="flex-1 overflow-x-auto min-h-[400px]">
-          <Table className="text-sm">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
+          {isFetching ? (
+            <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data ke database...</div>
+          ) : alerts.length === 0 ? (
+            <div className="h-48 grid place-items-center text-sm font-medium text-green-600">Antrean Peringatan Kosong. Semua selesai!</div>
+          ) : (
+            alerts.map((alert) => {
+              const isCritical = alert.tingkatKumulatif >= 3;
+              return (
+                <div key={alert.idPeringatan} className={`p-4 space-y-3 border-l-[4px] ${isCritical ? "border-l-red-500 bg-red-50/20" : "border-l-orange-400 bg-white"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-gray-950 leading-snug">{alert.nama}</div>
+                      <div className="mt-1 text-[11px] text-gray-500">{alert.kelas}</div>
+                    </div>
+                    <Badge variant="outline" className={`shrink-0 whitespace-nowrap bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>Level {alert.tingkatKumulatif}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`inline-flex min-w-[72px] justify-center whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-bold ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>{alert.totalHariAbsen} Hari</span>
+                    <span className="text-[11px] text-gray-500 truncate">{getTindakanInfo(alert.tingkatKumulatif)}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" className="h-9 rounded-md text-xs"><Printer className="mr-1.5 h-3.5 w-3.5" />Surat</Button>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" className={`h-9 rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}>Upload Bukti</Button>
+                      </DialogTrigger>
+                      <DialogContent className="bottom-0 top-auto translate-y-0 rounded-b-none sm:top-1/2 sm:translate-y-[-50%] sm:rounded-md sm:max-w-md">
+                        <form onSubmit={(e) => handleUploadResolution(alert.idPeringatan, e)}>
+                          <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border"><p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>
+                            <div className="space-y-2 pt-2"><Label htmlFor={`file-mobile-${alert.idPeringatan}`}>Upload File Bukti (.pdf)</Label><Input id={`file-mobile-${alert.idPeringatan}`} type="file" accept=".pdf" /></div>
+                            <div className="space-y-2"><Label htmlFor={`notes-mobile-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-mobile-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
+                          </div>
+                          <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="hidden md:block flex-1 overflow-x-auto min-h-[400px]">
+          <Table className="min-w-[760px] text-sm">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
               <TableRow>
                 <TableHead className="w-[40px] text-center border-r border-gray-200 font-semibold">No</TableHead>
                 <TableHead className="min-w-[200px] border-r border-gray-200 font-semibold">Nama Siswa</TableHead>
-                <TableHead className="text-center border-r border-gray-200 font-semibold">Total Absen</TableHead>
-                <TableHead className="text-center border-r border-gray-200 font-semibold">Level Kasus</TableHead>
+                <TableHead className="min-w-[120px] text-center border-r border-gray-200 font-semibold whitespace-nowrap">Total Absen</TableHead>
+                <TableHead className="min-w-[120px] text-center border-r border-gray-200 font-semibold whitespace-nowrap">Level Kasus</TableHead>
                 <TableHead className="text-right pr-6 font-semibold">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -124,15 +170,15 @@ export default function SemuaAlertPage() {
                       <TableCell className="text-center text-muted-foreground font-medium border-r border-gray-200">{idx + 1}</TableCell>
                       <TableCell className="border-r border-gray-200">
                          <div className="font-semibold text-gray-900">{alert.nama}</div>
-                         <div className="text-[11px] text-gray-500 mt-0.5">{alert.kelas} • NIS {alert.nis}</div>
+                         <div className="text-[11px] text-gray-500 mt-0.5">{alert.kelas}</div>
                       </TableCell>
-                      <TableCell className="text-center border-r border-gray-200">
-                        <span className={`text-[11px] font-bold px-2 py-1 rounded-md border ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>
+                      <TableCell className="text-center border-r border-gray-200 whitespace-nowrap">
+                        <span className={`inline-flex min-w-[72px] justify-center whitespace-nowrap text-[11px] font-bold px-2 py-1 rounded-md border ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>
                           {alert.totalHariAbsen} Hari
                         </span>
                       </TableCell>
-                      <TableCell className="text-center border-r border-gray-200">
-                         <Badge variant="outline" className={`font-semibold bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>
+                      <TableCell className="text-center border-r border-gray-200 whitespace-nowrap">
+                         <Badge variant="outline" className={`min-w-[70px] justify-center whitespace-nowrap font-semibold bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>
                            Level {alert.tingkatKumulatif}
                          </Badge>
                       </TableCell>
@@ -143,7 +189,7 @@ export default function SemuaAlertPage() {
                            </Button>
 
                            <Dialog>
-                            <DialogTrigger >
+                            <DialogTrigger asChild>
                               <Button size="sm" className={`h-8 px-3 gap-1.5 font-semibold rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
                                 <span className="hidden sm:inline">Upload Bukti Tindakan</span>
                                 <span className="sm:hidden">Selesaikan</span>

@@ -37,7 +37,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gray-50/50 p-4">
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
         
         {/* Header Biru */}
         <div className="bg-primary px-8 py-10 flex flex-col items-center justify-center text-center">
