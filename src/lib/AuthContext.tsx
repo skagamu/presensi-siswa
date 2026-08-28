@@ -28,15 +28,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    // Muat session dari LocalStorage saat app pertama kali dirender di Client
-    const savedToken = localStorage.getItem("bk_auth_token");
-    const savedUser = localStorage.getItem("bk_auth_user");
+    try {
+      const savedToken = localStorage.getItem("bk_auth_token");
+      const savedUser = localStorage.getItem("bk_auth_user");
 
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
+      if (savedToken && savedUser) {
+        setToken(savedToken);
+        setUser(JSON.parse(savedUser));
+      }
+    } catch(e) {
+      console.error(e);
+    } finally {
+      setIsReady(true);
     }
-    setIsReady(true);
   }, []);
 
   const login = (newToken: string, userData: User) => {
@@ -44,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     localStorage.setItem("bk_auth_token", newToken);
     localStorage.setItem("bk_auth_user", JSON.stringify(userData));
-    router.push("/");
+    window.location.href = "/presensi-siswa/";
   };
 
   const logout = () => {
@@ -53,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("bk_auth_token");
     localStorage.removeItem("bk_auth_user");
     toast.info("Anda telah keluar.");
-    router.push("/login");
+    window.location.href = "/presensi-siswa/login";
   };
 
   return (

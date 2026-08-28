@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, LayoutDashboard, Users, CalendarDays, FileWarning, ListTodo, MoreHorizontal } from "lucide-react";
+import { Archive, LayoutDashboard, Users, CalendarDays, FileWarning, ListTodo, MoreHorizontal, LogOut } from "lucide-react";
+import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   const groups = [
@@ -107,6 +109,21 @@ export function Sidebar() {
               </Link>
             );
           })}
+          {user && (
+            <div className="mt-2 pt-2 border-t border-gray-100">
+              <div className="px-3 py-1.5 text-xs text-gray-500">
+                Masuk sebagai: <span className="font-semibold text-gray-900">{user.nama}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setIsMoreOpen(false); logout(); }}
+                className="w-full flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4 text-red-600" />
+                Keluar (Logout)
+              </button>
+            </div>
+          )}
         </div>
       )}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.35)] backdrop-blur">

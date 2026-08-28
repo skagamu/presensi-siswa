@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { fetchGasApi } from "@/lib/api";
 import { toast } from "sonner";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
+import Image from "next/image";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -25,6 +26,7 @@ export default function LoginPage() {
         const { token, user } = res.data;
         toast.success(`Selamat datang, ${user.nama}!`);
         login(token, user);
+        setTimeout(() => { window.location.href = "/presensi-siswa/"; }, 300);
       } else {
         toast.error(res.message || "Login gagal.");
       }
@@ -36,76 +38,116 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50/50 p-4">
-      <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+    <div className="min-h-screen w-full bg-[#f3f4f6] flex items-center justify-center p-3 sm:p-6 md:p-10">
+      <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
         
-        {/* Header Biru */}
-        <div className="bg-primary px-8 py-10 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-2xl flex items-center justify-center mb-4 border border-white/30">
-            <Lock className="w-8 h-8 text-white" />
+        {/* LEFT PANE: LOGO & BRANDING */}
+        <div className="lg:col-span-5 bg-[#f8fafc] border-b lg:border-b-0 lg:border-r border-gray-100 p-8 sm:p-10 flex flex-col justify-between items-center text-center">
+          {/* HEADER TAG */}
+          <div className="w-full flex items-center justify-center">
+            <span className="text-xs font-black tracking-widest text-blue-600 uppercase bg-blue-50 px-3 py-1 rounded-full border border-blue-100">
+              SMK Gajah Mungkur 1
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">Sistem Manajemen BK</h1>
-          <p className="text-primary-foreground/80 mt-1 text-sm font-medium">Masuk untuk mengelola presensi dan pelanggaran siswa.</p>
+
+          {/* SCHOOL LOGO */}
+          <div className="my-6 lg:my-0 flex flex-col items-center justify-center">
+            <div className="relative w-40 h-40 sm:w-48 sm:h-48 drop-shadow-md transition-transform hover:scale-105 duration-300">
+              <img 
+                src="/presensi-siswa/logo-skagamu.png" 
+                alt="Logo SMK Gajah Mungkur 1 Wuryantoro" 
+                className="w-full h-full object-contain"
+              />
+            </div>
+            <h2 className="mt-5 text-lg sm:text-xl font-black text-gray-900 tracking-tight">
+              SISTEM INFORMASI BK
+            </h2>
+            <p className="text-xs font-semibold text-gray-500 mt-1">
+              Wuryantoro - Wonogiri
+            </p>
+          </div>
+
+          {/* MOTTO / INFO BAWAH */}
+          <div className="w-full">
+            <p className="text-[11px] text-gray-400 font-medium leading-relaxed">
+              Pelayanan Bimbingan Konseling & Presensi Terpadu
+            </p>
+          </div>
         </div>
 
-        {/* Form Area */}
-        <div className="p-8">
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700">Username</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <User className="w-5 h-5 text-gray-400" />
-                </div>
-                <input 
-                  type="text" 
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full pl-10 p-3 font-medium outline-none" 
-                  placeholder="Masukkan username..." 
-                  disabled={isLoading}
-                  required 
-                />
-              </div>
+        {/* RIGHT PANE: LOGIN FORM */}
+        <div className="lg:col-span-7 p-8 sm:p-12 lg:p-14 flex flex-col justify-between">
+          <div className="max-w-md w-full mx-auto my-auto space-y-6">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-950 tracking-tight">Welcome back!</h1>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1.5 font-normal">
+                Masuk ke panel guru BK untuk memulai aktivitas
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-gray-700">Password</label>
+            <form onSubmit={handleLogin} className="space-y-4 pt-2">
+              {/* USERNAME */}
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <Lock className="w-5 h-5 text-gray-400" />
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <User className="w-4 h-4" />
                 </div>
-                <input 
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Username akun BK"
+                  disabled={isLoading}
+                  required
+                  className="w-full bg-[#f8fafc] border border-gray-200/80 rounded-xl pl-11 pr-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 font-medium focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-50 transition-all outline-none"
+                />
+              </div>
+
+              {/* PASSWORD */}
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full pl-10 pr-10 p-3 font-medium outline-none" 
-                  placeholder="••••••••" 
+                  placeholder="Kata sandi"
                   disabled={isLoading}
-                  required 
+                  required
+                  className="w-full bg-[#f8fafc] border border-gray-200/80 rounded-xl pl-11 pr-11 py-3 text-sm text-gray-900 placeholder:text-gray-400 font-medium focus:bg-white focus:border-blue-600 focus:ring-4 focus:ring-blue-50 transition-all outline-none"
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-700"
-                  aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-            </div>
 
-            <button 
-              type="submit" 
-              disabled={isLoading}
-              className="w-full text-white bg-primary hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-blue-300 font-bold rounded-lg text-sm px-5 py-3.5 text-center transition-all disabled:opacity-70 mt-4"
-            >
-              {isLoading ? "Memverifikasi Kredensial..." : "Masuk ke Sistem"}
-            </button>
-          </form>
-          
-          <div className="mt-8 text-center text-xs text-gray-400 font-medium">
-            &copy; 2026 Bimbingan Konseling Sekolah
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => toast.info("Silakan hubungi administrator sekolah jika lupa kredensial.")}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              {/* SUBMIT BUTTON */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-3.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-sm shadow-md shadow-blue-600/25 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {isLoading ? "Memproses..." : "Login"}
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-8 text-center text-[11px] text-gray-400 font-medium">
+            &copy; 2026 SMK GAJAH MUNGKUR 1 WURYANTORO • ALL RIGHTS RESERVED
           </div>
         </div>
 

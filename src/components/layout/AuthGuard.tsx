@@ -9,28 +9,34 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const isLoginPage = pathname ? pathname.includes("/login") : false;
+
   useEffect(() => {
     if (isReady) {
-      const isLoginPage = pathname.includes("/login");
-      
       if (!user && !isLoginPage) {
-        router.push("/login");
+        // Next static export safe navigation
+        if (typeof window !== "undefined") {
+          window.location.href = "/presensi-siswa/login";
+        } else {
+          router.push("/login");
+        }
       }
       if (user && isLoginPage) {
-        router.push("/");
+        if (typeof window !== "undefined") {
+          window.location.href = "/presensi-siswa/";
+        } else {
+          router.push("/");
+        }
       }
     }
-  }, [user, isReady, pathname, router]);
+  }, [user, isReady, isLoginPage, router]);
 
-  // Tampilkan blank screen sebentar saat mengecek local storage agar tidak kedip
   if (!isReady) {
     return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-medium">Memuat Sesi...</div>;
   }
-
-  const isLoginPage = pathname.includes("/login");
   
   if (!user && !isLoginPage) {
-    return null;
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-gray-400 text-sm font-medium">Mengalihkan ke Login...</div>;
   }
 
   return <>{children}</>;

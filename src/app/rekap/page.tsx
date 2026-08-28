@@ -157,10 +157,40 @@ export default function RekapitulasiMatrixPage() {
 
   return (
     <div className="w-full space-y-5">
-      <div className="mb-6 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Laporan Presensi</h1>
           <p className="text-muted-foreground mt-1 text-sm">Pantau kehadiran siswa berdasarkan mode waktu dan filter status.</p>
+        </div>
+
+        {/* CONTROLS */}
+        <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3">
+          <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto shadow-inner">
+             <button onClick={() => { setMode("BULANAN"); setStatusFilter("SEMUA"); }} className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${mode === "BULANAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}>Matrix Bulanan</button>
+             <button onClick={() => { setMode("HARIAN"); setStatusFilter("SEMUA"); }} className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${mode === "HARIAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}>Daftar Harian</button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <Select value={tingkat} onValueChange={(val) => { if(val) setTingkat(val); }} disabled={isFetching}>
+              <SelectTrigger className="w-full sm:w-[130px] h-9 bg-white text-xs font-semibold border-gray-200 shadow-sm">
+                <SelectValue placeholder="Tingkat" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SEMUA">Semua Tingkat</SelectItem>
+                <SelectItem value="X">Kelas X</SelectItem>
+                <SelectItem value="XI">Kelas XI</SelectItem>
+                <SelectItem value="XII">Kelas XII</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {mode === "BULANAN" ? (
+              <input type="month" value={bulan} onChange={(e) => setBulan(e.target.value)} className="h-9 w-full sm:w-auto rounded-md border border-gray-200 px-3 py-1 text-xs font-semibold bg-white shadow-sm" />
+            ) : (
+              <input type="date" value={tanggalHarian} onChange={(e) => setTanggalHarian(e.target.value)} className="h-9 w-full sm:w-auto rounded-md border border-gray-200 px-3 py-1 text-xs font-semibold bg-white shadow-sm" />
+            )}
+            
+            <Button onClick={fetchRekap} variant="secondary" disabled={isFetching} className="h-9 w-full sm:w-auto text-xs hidden sm:flex border border-gray-200 shadow-sm">Refresh</Button>
+          </div>
         </div>
       </div>
 
@@ -208,36 +238,7 @@ export default function RekapitulasiMatrixPage() {
       <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* HEADER */}
         <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-0 flex flex-col gap-4">
-          <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3">
-            <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto shadow-inner">
-               <button onClick={() => { setMode("BULANAN"); setStatusFilter("SEMUA"); }} className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${mode === "BULANAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}>Matrix Bulanan</button>
-               <button onClick={() => { setMode("HARIAN"); setStatusFilter("SEMUA"); }} className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${mode === "HARIAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}>Daftar Harian</button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <Select value={tingkat} onValueChange={(val) => { if(val) setTingkat(val); }} disabled={isFetching}>
-                <SelectTrigger className="w-full sm:w-[130px] h-9 bg-gray-50 text-xs font-semibold border-gray-200">
-                  <SelectValue placeholder="Tingkat" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SEMUA">Semua Tingkat</SelectItem>
-                  <SelectItem value="X">Kelas X</SelectItem>
-                  <SelectItem value="XI">Kelas XI</SelectItem>
-                  <SelectItem value="XII">Kelas XII</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {mode === "BULANAN" ? (
-                <input type="month" value={bulan} onChange={(e) => setBulan(e.target.value)} className="h-9 w-full sm:w-auto rounded-md border border-gray-200 px-3 py-1 text-xs font-semibold bg-gray-50" />
-              ) : (
-                <input type="date" value={tanggalHarian} onChange={(e) => setTanggalHarian(e.target.value)} className="h-9 w-full sm:w-auto rounded-md border border-gray-200 px-3 py-1 text-xs font-semibold bg-gray-50" />
-              )}
-              
-              <Button onClick={fetchRekap} variant="secondary" disabled={isFetching} className="h-9 w-full sm:w-auto text-xs hidden sm:flex border border-gray-200">Refresh</Button>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center gap-2 w-full pt-2 border-t border-gray-100">
+          <div className="flex flex-col sm:flex-row items-center gap-2 w-full">
              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider w-full sm:w-auto mr-2">Tampilkan:</span>
              <div className="flex flex-wrap sm:flex-nowrap w-full sm:w-auto gap-1.5">
                <button onClick={() => setStatusFilter("SEMUA")} className={`py-1.5 px-3 text-[11px] font-bold rounded border ${statusFilter === "SEMUA" ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"}`}>SEMUA</button>
