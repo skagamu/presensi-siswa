@@ -17,7 +17,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-20 md:pb-0 bg-gray-50/80">
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-44 md:pb-0 bg-gray-50/80">
         {user && (
           <div className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between md:justify-end border-b border-gray-200 bg-white/90 px-4 md:px-8 backdrop-blur">
             <div className="md:hidden flex items-center gap-2">

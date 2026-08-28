@@ -156,7 +156,7 @@ export default function RekapitulasiMatrixPage() {
   };
 
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full space-y-5 pb-24 md:pb-0">
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Laporan Presensi</h1>
@@ -270,7 +270,7 @@ export default function RekapitulasiMatrixPage() {
         </div>
         
         {/* CONTENT */}
-        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px] pb-32">
           {isFetching ? (
             <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data ke Spreadsheet...</div>
           ) : displayedData.length === 0 ? (

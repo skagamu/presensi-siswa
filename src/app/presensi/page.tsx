@@ -115,7 +115,7 @@ export default function PresensiHarianPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5">
+    <div className="max-w-6xl mx-auto space-y-5 pb-24 md:pb-0">
       <div>
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Input Presensi Harian</h1>
         <p className="text-muted-foreground mt-1 text-sm">Default status siswa adalah HADIR. Klik opsi untuk mengubah.</p>
@@ -275,7 +275,7 @@ export default function PresensiHarianPage() {
         </div>
         
         {/* FOOTER */}
-        <div className="sticky bottom-16 md:bottom-0 border-t border-gray-200 p-3 sm:px-6 sm:py-4 bg-white/95 backdrop-blur flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="fixed md:static bottom-16 left-0 right-0 z-30 md:z-auto border-t border-gray-200 p-3 sm:px-6 sm:py-4 bg-white/95 backdrop-blur flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] md:shadow-none">
           <div className="text-xs text-gray-500">Tidak hadir: <span className="font-semibold text-gray-950">{summary.SAKIT + summary.IZIN + summary.ALPHA}</span></div>
           <Button 
             size="lg" 
