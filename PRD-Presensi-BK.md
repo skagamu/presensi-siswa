@@ -119,6 +119,8 @@ $$\text{Total Absen} = \text{Alpha} + \text{Izin} + (\text{Sakit Tanpa Surat}) +
 
 ## 7. System Workflow & Flowchart (Mermaid.js)
 
+Berikut adalah diagram alur kerja sistem presensi dan manajemen kasus BK:
+
 ```mermaid
 flowchart TD
     Start([0.0 Login Guru BK & Masuk Dashboard BK]) --> F1_1[1.1 Buka Menu Input Absensi]
@@ -185,65 +187,7 @@ File Spreadsheet: **`DB_PRESENSI_SISWA_BK`**
 
 ---
 
-### 8.2 API Endpoint Contracts (Google Apps Script Web App)
-
-#### A. Simpan Presensi Harian (Batch Insert)
-```http
-POST https://script.google.com/macros/s/{WEB_APP_ID}/exec
-Content-Type: application/json
-
-{
-  "action": "saveAttendance",
-  "date": "2026-08-26",
-  "attendances": [
-    { "nis": "10293", "nama": "Ahmad Dani", "kelas": "X TKR 1", "status_presensi": "HADIR", "ada_surat_dokter": false },
-    { "nis": "10294", "nama": "Budi Utomo", "kelas": "XI TKJ 2", "status_presensi": "ALPHA", "ada_surat_dokter": false }
-  ]
-}
-```
-
-#### B. Fetch Dashboard Priority Alert
-```http
-GET https://script.google.com/macros/s/{WEB_APP_ID}/exec?action=getPriorityAlerts
-Response 200 OK:
-{
-  "status": "success",
-  "data": [
-    {
-      "id_peringatan": "ALERT-9901",
-      "nis": "10294",
-      "nama": "Budi Utomo",
-      "kelas": "XI TKJ 2",
-      "tingkat_kumulatif": 1,
-      "total_hari_absen": 3,
-      "status_peringatan": "AKTIF",
-      "waktu_dibuat": "2026-08-26 08:00:00"
-    }
-  ]
-}
-```
-
-#### C. Resolve Priority Case (Upload PDF & Close Alert)
-```http
-POST https://script.google.com/macros/s/{WEB_APP_ID}/exec
-Content-Type: application/json
-
-{
-  "action": "resolveCase",
-  "id_peringatan": "ALERT-9901",
-  "nis": "10294",
-  "nama": "Budi Utomo",
-  "kelas": "XI TKJ 2",
-  "catatan_konseling": "Sudah dilakukan Home Visit I dan pembinaan.",
-  "ditangani_oleh": "Guru BK",
-  "fileName": "Hasil_HomeVisit1_Budi_Utomo.pdf",
-  "pdfBase64": "JVBERi0xLjQKJ..."
-}
-```
-
----
-
-## 10. State Management & Session Architecture
+## 9. State Management & Session Architecture
 
 Frontend (Next.js/React) mengelola state aplikasi secara terpusat untuk 1 Role Guru BK:
 
@@ -289,7 +233,7 @@ interface BKAppState {
 
 ---
 
-## 11. AI Developer Guidance & Prompt Template
+## 10. AI Developer Guidance & Prompt Template
 
 Gunakan prompt di bawah ini saat meminta AI Coding Assistant (Cursor, Claude, ChatGPT, Codex) membuatkan kodenya:
 
@@ -297,7 +241,7 @@ Gunakan prompt di bawah ini saat meminta AI Coding Assistant (Cursor, Claude, Ch
 Anda adalah seorang Senior Full-Stack Developer. Tolong kembangkan aplikasi web khusus Guru BK berdasarkan Dokumen PRD (Single-User BK Dedicated) ini:
 
 1. Buat aplikasi dengan 3 Menu Utama: Dashboard BK (Top Priority Alert), Input Presensi Harian (Default HADIR), dan Riwayat Kasus.
-2. Gunakan Google Sheets sebagai database (Sheet: Siswa_X, Siswa_XI, Siswa_XII, LogPresensi, PeringatanKasus, PenyelesaianKasus) dan Google Apps Script sebagai API.
+2. Gunakan Google Sheets sebagai database (Sheet: Siswa_X, Siswa_XI, Siswa_XII, LogPresensi, PeringatanKasus, PenyelesaianKasus, Users) dan Google Apps Script sebagai API.
 3. Implementasikan logika hitung akumulasi absen otomatis (>= 3 hari) untuk menaikkan alert siswa ke posisi teratas Dashboard BK.
 4. Sediakan fitur cetak PDF Surat Tugas Home Visit dan pastikan kartu alert di top dashboard HANYA BISA ditutup dengan mengunggah file PDF bukti penyelesaian.
 ```

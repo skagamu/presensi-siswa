@@ -8,13 +8,13 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const navLinks = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Semua Alert", href: "/semua-alert", icon: ListTodo },
-    { name: "Presensi", href: "/presensi", icon: Users },
-    { name: "Bank Kasus", href: "/bank-kasus", icon: FileWarning },
-    { name: "Daftar Kasus", href: "/daftar-kasus", icon: ListTodo },
-    { name: "Rekap", href: "/rekap", icon: CalendarDays },
-    { name: "Riwayat", href: "/riwayat", icon: Archive },
+    { name: "Dashboard", href: "/presensi-siswa", icon: LayoutDashboard },
+    { name: "Semua Alert", href: "/presensi-siswa/semua-alert", icon: ListTodo },
+    { name: "Presensi", href: "/presensi-siswa/presensi", icon: Users },
+    { name: "Bank Kasus", href: "/presensi-siswa/bank-kasus", icon: FileWarning },
+    { name: "Daftar Kasus", href: "/presensi-siswa/daftar-kasus", icon: ListTodo },
+    { name: "Rekap", href: "/presensi-siswa/rekap", icon: CalendarDays },
+    { name: "Riwayat", href: "/presensi-siswa/riwayat", icon: Archive },
   ];
 
   return (

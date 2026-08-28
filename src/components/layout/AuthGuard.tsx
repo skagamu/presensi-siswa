@@ -14,10 +14,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       const isLoginPage = pathname.includes("/login");
       
       if (!user && !isLoginPage) {
-        router.push("/login");
+        router.push("/presensi-siswa/login");
       }
       if (user && isLoginPage) {
-        router.push("/");
+        router.push("/presensi-siswa/");
       }
     }
   }, [user, isReady, pathname, router]);

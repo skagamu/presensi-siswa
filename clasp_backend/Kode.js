@@ -1,5 +1,5 @@
 /**
- * BACKEND GOOGLE APPS SCRIPT - PRESENSI SISWA BK (v7.0 - Massive Dummy Injector)
+ * BACKEND GOOGLE APPS SCRIPT - PRESENSI SISWA BK (v7.1 - Auth Case Insensitive)
  * -----------------------------------------------------
  */
 
@@ -57,14 +57,27 @@ const AuthController = {
   login: function(body) {
     try {
       const { username, password } = body;
-      if (!username || !password) return ResponseHelper.error("Kosong.");
+      if (!username || !password) return ResponseHelper.error("Username dan Password tidak boleh kosong.");
+      
       const data = SpreadsheetRepository.getSheet(CONFIG.SHEETS.USERS).getDataRange().getValues();
+      
+      // CASE INSENSITIVE: Ubah semua inputan user menjadi huruf kecil (lowercase)
+      const inputUsername = String(username).trim().toLowerCase();
+
       for (let i = 1; i < data.length; i++) {
-        if (String(data[i][1]).trim() === String(username).trim() && String(data[i][2]).trim() === String(password).trim()) {
-          return ResponseHelper.success({ token: `TKN-${Date.now()}`, user: { id: data[i][0], username: data[i][1], nama: data[i][3], role: data[i][4] } });
+        // [1] = username di database. Ubah juga jadi huruf kecil saat mencocokkan.
+        const dbUsername = String(data[i][1]).trim().toLowerCase();
+
+        if (dbUsername === inputUsername) {
+          // Jika username ketemu, cocokkan password (Password TETAP Case Sensitive demi keamanan)
+          if(String(data[i][2]).trim() === String(password).trim()) {
+            return ResponseHelper.success({ token: `TKN-${Date.now()}`, user: { id: data[i][0], username: data[i][1], nama: data[i][3], role: data[i][4] } });
+          } else {
+            return ResponseHelper.error("Password salah.");
+          }
         }
       }
-      return ResponseHelper.error("Username/Password salah.");
+      return ResponseHelper.error("Username tidak ditemukan.");
     } catch(err) { return ResponseHelper.error(err.message); }
   }
 };
@@ -76,45 +89,30 @@ const MassiveInjector = {
       const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
       const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
       
-      // Safety check jika sheet belum diisi
       if(x.length < 5 || xi.length < 5 || xii.length < 5) return ResponseHelper.error("Data siswa kurang. Isi dulu Sheet Siswa.");
 
       const timestamp = TimeHelper.getCurrentTimestamp();
       const randArr = (arr) => arr[Math.floor(Math.random() * arr.length)];
       
-      // Ambil beberapa siswa random dari tiap tingkat
       const korbanAlert = [x[0], xi[1], xii[2], x[3], xi[4], xii[5], x[6], xii[7]];
       const korbanKasus = [xi[0], xii[1], x[2], xi[3], xii[4]];
       const korbanSelesai = [x[8], xi[8], xii[8]];
 
-      let alertRecords = [];
-      let kasusRecords = [];
-      let selesaiRecords = [];
+      let alertRecords = []; let kasusRecords = []; let selesaiRecords = [];
 
-      // 1. INJECT ACTIVE ALERTS (Level 1 - 4 random)
       korbanAlert.forEach((s, idx) => {
-         const level = (idx % 4) + 1; // Level 1-4
-         const totalAbsen = level * 3; // 3, 6, 9, 12
-         alertRecords.push([
-           `ALT-MASSIVE-${Date.now()}-${s.nis}`, s.nis, s.nama, s.kelas, level, totalAbsen, "AKTIF", timestamp
-         ]);
+         const level = (idx % 4) + 1; const totalAbsen = level * 3;
+         alertRecords.push([ `ALT-MASSIVE-${Date.now()}-${s.nis}`, s.nis, s.nama, s.kelas, level, totalAbsen, "AKTIF", timestamp ]);
       });
 
-      // 2. INJECT BANK KASUS PELANGGARAN
       const jenisKasus = ["Merokok di Kantin", "Atribut Tidak Lengkap", "Terlambat Masuk Jam Pertama", "Melompat Pagar Sekolah", "Membawa Ponsel saat Ujian"];
       korbanKasus.forEach((s, idx) => {
-         kasusRecords.push([
-           `BK-MASSIVE-${Date.now()}-${s.nis}`, TimeHelper.getCurrentDate(), s.nis, s.nama, s.kelas, randArr(jenisKasus), timestamp
-         ]);
+         kasusRecords.push([ `BK-MASSIVE-${Date.now()}-${s.nis}`, TimeHelper.getCurrentDate(), s.nis, s.nama, s.kelas, randArr(jenisKasus), timestamp ]);
       });
 
-      // 3. INJECT PENYELESAIAN KASUS (Riwayat)
+      const cat = ["Diberikan SP 1 dan peringatan lisan", "Home visit dilakukan, orang tua menyanggupi pengawasan", "Siswa setuju membuat surat pernyataan bermaterai"];
       korbanSelesai.forEach((s, idx) => {
-         const cat = ["Diberikan SP 1 dan peringatan lisan", "Home visit dilakukan, orang tua menyanggupi pengawasan", "Siswa setuju membuat surat pernyataan bermaterai"];
-         selesaiRecords.push([
-           `RES-MASSIVE-${Date.now()}-${s.nis}`, `ALT-OLD-${s.nis}`, s.nis, s.nama, s.kelas, 
-           "https://drive.google.com/file/d/dummy_pdf/view", randArr(cat), "Bapak Budi (BK)", timestamp
-         ]);
+         selesaiRecords.push([ `RES-MASSIVE-${Date.now()}-${s.nis}`, `ALT-OLD-${s.nis}`, s.nis, s.nama, s.kelas, "https://drive.google.com/file/d/dummy_pdf/view", randArr(cat), "Bapak Budi (BK)", timestamp ]);
       });
 
       if(alertRecords.length > 0) SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PERINGATAN_KASUS, alertRecords);
@@ -122,9 +120,7 @@ const MassiveInjector = {
       if(selesaiRecords.length > 0) SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PENYELESAIAN_KASUS, selesaiRecords);
 
       return ResponseHelper.success(null, "Massive Injection Berhasil! Silakan cek Dashboard.");
-    } catch(err) {
-      return ResponseHelper.error(err.message);
-    }
+    } catch(err) { return ResponseHelper.error(err.message); }
   }
 };
 
@@ -254,6 +250,7 @@ const AttendanceController = {
         
         let logsHarian = {}; 
         let sakit = 0, izin = 0, alpha = 0;
+        
         const cleanSiswaNis = String(siswa.nis).replace(/[^0-9]/g, '');
 
         for(let i=1; i < logs.length; i++) {
@@ -286,7 +283,14 @@ const AttendanceController = {
           }
         }
         
-        rekapResult.push({ nis: cleanSiswaNis, nama: siswa.nama, kelas: siswa.kelas, sakit, izin, alpha, totalTidakHadir: sakit + izin + alpha, dailyLogs: logsHarian });
+        rekapResult.push({
+          nis: cleanSiswaNis, 
+          nama: siswa.nama,
+          kelas: siswa.kelas,
+          sakit, izin, alpha,
+          totalTidakHadir: sakit + izin + alpha,
+          dailyLogs: logsHarian
+        });
       });
       return ResponseHelper.success(rekapResult);
     } catch(error) { return ResponseHelper.error(error.message); }
@@ -347,6 +351,11 @@ const SpreadsheetRepository = {
     let ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
     if (!ss) throw new Error(`Spreadsheet tidak aktif.`);
     let sheet = ss.getSheetByName(sheetName);
+    if (!sheet && sheetName === CONFIG.SHEETS.BANK_KASUS) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(["id_kasus", "tanggal", "nis", "nama", "kelas", "jenis_pelanggaran", "waktu_simpan"]);
+    }
+    if (!sheet) throw new Error(`Tab Sheet '${sheetName}' tidak ditemukan.`);
     return sheet;
   },
 
@@ -386,6 +395,7 @@ const SpreadsheetRepository = {
         }
         
         const cleanLogNis = String(data[i][2]).replace(/[^0-9]/g, '');
+
         if(rowDateStr.substring(0,10) === dateStr && cleanLogNis === cleanStudentNis) {
           sheet.getRange(i + 1, 6).setValue(student.status_presensi);
           sheet.getRange(i + 1, 8).setValue(timestamp);

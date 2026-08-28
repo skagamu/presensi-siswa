@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     localStorage.setItem("bk_auth_token", newToken);
     localStorage.setItem("bk_auth_user", JSON.stringify(userData));
-    router.push("/");
+    router.push("/presensi-siswa/");
   };
 
   const logout = () => {
@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("bk_auth_token");
     localStorage.removeItem("bk_auth_user");
     toast.info("Anda telah keluar.");
-    router.push("/login");
+    router.push("/presensi-siswa/login");
   };
 
   return (

@@ -1,4 +1,4 @@
-export const API_URL = "https://script.google.com/macros/s/AKfycbwOoUV7vFnu056dBhc_tjVE_ORzHO2yEzCUsPRpPqEcTAuHGV9dSN2PAYDpON-7Xqup/exec";
+export const API_URL = "https://script.google.com/macros/s/AKfycbxiY7HTGPgmsNUjfq_K6-kC6sT6l_IUnl0q-85LnU56anh7zG6WcIxhBc8v6_Gc-T7-/exec";
 
 // Helper function untuk POST (Simpan Data)
 export const fetchGasApi = async (action: string, payload: any = {}) => {

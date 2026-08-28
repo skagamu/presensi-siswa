@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { fetchGasApi } from "@/lib/api";
 import { toast } from "sonner";
-import { Lock, User } from "lucide-react";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
 
@@ -18,7 +19,7 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      const res = await fetchGasApi("login", { username, password });
+      const res = await fetchGasApi("login", { username: username.trim().toLowerCase(), password });
       
       if (res.status === "success") {
         const { token, user } = res.data;
@@ -75,14 +76,22 @@ export default function LoginPage() {
                   <Lock className="w-5 h-5 text-gray-400" />
                 </div>
                 <input 
-                  type="password" 
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full pl-10 p-3 font-medium outline-none" 
+                  className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full pl-10 pr-10 p-3 font-medium outline-none" 
                   placeholder="••••••••" 
                   disabled={isLoading}
                   required 
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-700"
+                  aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 
