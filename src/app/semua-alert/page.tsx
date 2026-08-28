@@ -56,13 +56,23 @@ export default function SemuaAlertPage() {
 
   useEffect(() => { fetchAlerts(); }, []);
 
-  const handleUploadResolution = async (idPeringatan: string, e: React.FormEvent) => {
+  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent) => {
+    const idPeringatan = alert.idPeringatan;
     e.preventDefault();
     setIsUploading(idPeringatan);
     const notes = (e.currentTarget.querySelector("textarea") as HTMLTextAreaElement | null)?.value || "";
 
     try {
-      const res = await fetchGasApi("resolveCase", { id_peringatan: idPeringatan, catatan_konseling: notes || "Diselesaikan", ditangani_oleh: "Guru BK", fileName: "bukti.pdf", pdfBase64: "dummy" });
+      const res = await fetchGasApi("resolveCase", { 
+        id_peringatan: alert.idPeringatan, 
+        nis: alert.nis,
+        nama: alert.nama,
+        kelas: alert.kelas,
+        catatan_konseling: notes || "Diselesaikan", 
+        ditangani_oleh: "Guru BK", 
+        fileName: "bukti.pdf", 
+        pdfBase64: "dummy" 
+      });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
         setAlerts(alerts.filter(a => a.idPeringatan !== idPeringatan));
@@ -128,7 +138,7 @@ export default function SemuaAlertPage() {
                         <Button size="sm" className={`h-9 rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}>Upload Bukti</Button>
                       </DialogTrigger>
                       <DialogContent className="bottom-0 top-auto translate-y-0 rounded-b-none sm:top-1/2 sm:translate-y-[-50%] sm:rounded-md sm:max-w-md">
-                        <form onSubmit={(e) => handleUploadResolution(alert.idPeringatan, e)}>
+                        <form onSubmit={(e) => handleUploadResolution(alert, e)}>
                           <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                           <div className="space-y-4 py-4">
                             <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border"><p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>

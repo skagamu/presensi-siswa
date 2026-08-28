@@ -99,13 +99,23 @@ export default function DashboardPage() {
     switch (tingkat) { case 1: return "bg-yellow-50 text-yellow-800 border-yellow-200"; case 2: return "bg-orange-50 text-orange-800 border-orange-200"; case 3: return "bg-red-50 text-red-700 border-red-200"; case 4: return "bg-red-600 text-white border-red-700"; default: return ""; }
   };
 
-  const handleUploadResolution = async (idPeringatan: string, e: React.FormEvent) => {
+  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent) => {
+    const idPeringatan = alert.idPeringatan;
     e.preventDefault();
     setIsUploading(idPeringatan);
     const notes = (document.getElementById(`notes-${idPeringatan}`) as HTMLTextAreaElement).value;
 
     try {
-      const res = await fetchGasApi("resolveCase", { id_peringatan: idPeringatan, catatan_konseling: notes || "Diselesaikan", ditangani_oleh: "Guru BK", fileName: "bukti.pdf", pdfBase64: "dummy" });
+      const res = await fetchGasApi("resolveCase", { 
+        id_peringatan: alert.idPeringatan, 
+        nis: alert.nis,
+        nama: alert.nama,
+        kelas: alert.kelas,
+        catatan_konseling: notes || "Diselesaikan", 
+        ditangani_oleh: "Guru BK", 
+        fileName: "bukti.pdf", 
+        pdfBase64: "dummy" 
+      });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
         if (alerts) setAlerts(alerts.filter(a => a.idPeringatan !== idPeringatan));
@@ -218,7 +228,7 @@ export default function DashboardPage() {
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="sm:max-w-md">
-                            <form onSubmit={(e) => handleUploadResolution(alert.idPeringatan, e)}>
+                            <form onSubmit={(e) => handleUploadResolution(alert, e)}>
                               <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                               <div className="space-y-4 py-4">
                                 <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2"><p>Tindakan yang disarankan: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>
