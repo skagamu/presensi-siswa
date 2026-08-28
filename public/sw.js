@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bk-presensi-v1';
+const CACHE_NAME = 'bk-presensi-v2';
 
 // Tambahkan path dasar GitHub Pages ke aset-aset statis
 const urlsToCache = [
@@ -16,6 +16,11 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   // Hanya intercept request GET, biarkan request POST (Simpan Data) lolos
   if (event.request.method !== 'GET') return;
+
+  if (event.request.mode === 'navigate' || event.request.destination === 'script' || event.request.destination === 'style') {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request)
