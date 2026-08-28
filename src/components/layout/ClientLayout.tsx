@@ -52,7 +52,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
       <Sidebar />
       <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-44 md:pb-0 bg-gray-50/80">
         {user && (
-          <div className="sticky top-0 z-30 flex h-14 md:h-16 items-center justify-between border-b border-gray-200 bg-white/90 px-4 md:px-8 backdrop-blur">
+          <div className="sticky top-0 z-30 flex min-h-[56px] md:min-h-[64px] items-center justify-between border-b border-gray-200 bg-white/95 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:py-0 md:px-8 backdrop-blur shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
             
             {/* MOBILE: SISI KIRI (LOGO & NAMA) */}
             <div className="md:hidden flex items-center gap-2">
