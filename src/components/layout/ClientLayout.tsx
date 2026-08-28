@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { useAuth } from "@/lib/AuthContext";
 import { LogOut, Clock, CalendarDays } from "lucide-react";
+import { PwaInstallPrompt } from "@/components/layout/PwaInstallPrompt";
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -49,6 +50,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <PwaInstallPrompt />
       <Sidebar />
       <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-44 md:pb-0 bg-gray-50/80">
         {user && (
