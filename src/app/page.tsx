@@ -177,7 +177,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex justify-between items-end mb-3">
                <h2 className="text-xl font-bold tracking-tight text-gray-900">Priority Alerts Top 3</h2>
-               <Link href="/presensi-siswa/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
+               <Link href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -279,7 +279,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex justify-between items-end mb-3">
                <h2 className="text-xl font-bold tracking-tight text-gray-900">5 Kasus Terakhir</h2>
-               <Link href="/presensi-siswa/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
+               <Link href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
             </div>
             
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                </div>
 
                <div className="p-3 bg-gray-50 border-t border-gray-100 text-center mt-auto">
-                 <Link href="/presensi-siswa/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
+                 <Link href="/bank-kasus" className="text-xs font-bold text-orange-600 hover:text-orange-700 flex items-center justify-center gap-1">
                    + Input Kasus Baru <ArrowRight className="w-3 h-3"/>
                  </Link>
                </div>
