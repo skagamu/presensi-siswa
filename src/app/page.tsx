@@ -117,82 +117,82 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="mb-6 flex justify-between items-end">
+    <div className="max-w-7xl mx-auto space-y-5">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard BK</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Dashboard BK</h1>
           <p className="text-muted-foreground mt-1 text-sm">Ikhtisar harian kedisiplinan & presensi siswa sekolah.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchDashboardData} disabled={isLoading} className="gap-2 hidden md:flex">
+        <Button variant="outline" size="sm" onClick={fetchDashboardData} disabled={isLoading} className="gap-2 w-fit rounded-md border-gray-200 bg-white shadow-sm">
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
           {isLoading ? "Refreshing..." : "Refresh"}
         </Button>
       </div>
 
       {/* TOP WIDGET STATS - REFACTORED TO NATIVE DIVS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col p-4 gap-2">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Siswa</h3>
+            <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total Siswa</h3>
             <Users className="w-4 h-4 text-blue-500" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{stats ? stats.totalMurid : "..."}</div>
+          <div className="text-2xl font-semibold text-gray-900">{stats ? stats.totalMurid : "..."}</div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col p-4 gap-2">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</h3>
+            <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</h3>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
-          <div className="text-2xl font-bold text-green-600">{stats ? stats.hadirHariIni : "..."}</div>
+          <div className="text-2xl font-semibold text-green-600">{stats ? stats.hadirHariIni : "..."}</div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col p-4 gap-1">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-1 min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Absen Hari Ini</h3>
+            <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Absen Hari Ini</h3>
             <XCircle className="w-4 h-4 text-red-500" />
           </div>
           <div className="flex items-end gap-2 mt-1">
-            <div className="text-2xl font-bold text-red-600 leading-none">{stats ? stats.absenHariIni : "..."}</div>
+            <div className="text-2xl font-semibold text-red-600 leading-none">{stats ? stats.absenHariIni : "..."}</div>
             <span className="text-[10px] sm:text-xs text-muted-foreground pb-0.5">{stats ? `(S:${stats.breakdown.SAKIT} I:${stats.breakdown.IZIN} A:${stats.breakdown.ALPHA})` : ""}</span>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col p-4 gap-2">
+        <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-4 gap-2 min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">% Kehadiran</h3>
+            <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">% Kehadiran</h3>
             <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${stats && stats.persentaseKehadiran < 90 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Tgt &gt; 95%</div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{stats ? `${stats.persentaseKehadiran}%` : "..."}</div>
+          <div className="text-2xl font-semibold text-gray-900">{stats ? `${stats.persentaseKehadiran}%` : "..."}</div>
         </div>
       </div>
 
       {/* TWO COLUMNS LAYOUT */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 pt-4">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 pt-2">
         
         {/* KOLOM KIRI: PRIORITY ALERTS & CHART */}
-        <div className="xl:col-span-2 space-y-6">
+        <div className="xl:col-span-8 space-y-5">
           
           <div>
             <div className="flex justify-between items-end mb-3">
-               <h2 className="text-xl font-bold tracking-tight text-gray-900">Priority Alerts Top 3</h2>
+               <h2 className="text-lg font-semibold tracking-tight text-gray-950">Priority Alerts Top 3</h2>
                <Link href="/semua-alert" className="text-sm font-semibold text-primary hover:underline">Lihat Semua Alerts</Link>
             </div>
 
             <div className="flex flex-col gap-2">
               {isLoading ? (
-                <div className="p-6 flex flex-col items-center justify-center text-muted-foreground border rounded-xl bg-white h-[80px]">
+                <div className="p-6 flex flex-col items-center justify-center text-muted-foreground border rounded-md bg-white h-[80px]">
                   <RefreshCw className="w-5 h-5 animate-spin text-gray-300" />
                 </div>
               ) : alerts && alerts.length === 0 ? (
-                <div className="p-6 text-center bg-green-50 text-green-700 border border-green-200 rounded-xl font-medium text-sm">Tidak ada Active Alert saat ini. Sekolah kondusif!</div>
+                <div className="p-6 text-center bg-green-50 text-green-700 border border-green-200 rounded-md font-medium text-sm">Tidak ada Active Alert saat ini. Sekolah kondusif!</div>
               ) : (
                 alerts?.slice(0, 3).map((alert) => {
                   const isCritical = alert.tingkatKumulatif >= 3;
                   return (
                     // RIBBON ALERT (Murni HTML DIV Tanpa Komponen Card Shadcn)
-                    <div key={alert.idPeringatan} className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl border transition-all gap-2 sm:gap-4 bg-white ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
+                    <div key={alert.idPeringatan} className={`flex flex-col sm:flex-row sm:items-center justify-between px-3 py-2 sm:px-4 sm:py-3 rounded-md border transition-all gap-2 sm:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
                       <div className="flex items-center gap-3 flex-1">
                         <div className={`p-1.5 sm:p-2 rounded-md flex-shrink-0 ${isCritical ? 'bg-red-50 text-red-500' : 'bg-orange-50 text-orange-500'}`}>
                           <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -238,7 +238,7 @@ export default function DashboardPage() {
 
           <div>
             {/* BAR CHART REFACTORED TO NATIVE DIV */}
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+            <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 leading-none">Trend Kehadiran Siswa</h3>
@@ -250,7 +250,7 @@ export default function DashboardPage() {
               </div>
               
               <div className="p-4 sm:p-5">
-                <div className="h-[240px] w-full">
+                <div className="h-[280px] w-full">
                   {isLoading || !stats ? (
                      <div className="w-full h-full flex items-center justify-center text-sm text-gray-400">Memuat grafik...</div>
                   ) : (
@@ -274,15 +274,15 @@ export default function DashboardPage() {
         </div>
 
         {/* KOLOM KANAN: PREVIEW BANK KASUS */}
-        <div className="space-y-6">
+        <div className="xl:col-span-4 space-y-5">
           
           <div>
             <div className="flex justify-between items-end mb-3">
-               <h2 className="text-xl font-bold tracking-tight text-gray-900">5 Kasus Terakhir</h2>
+               <h2 className="text-lg font-semibold tracking-tight text-gray-950">5 Kasus Terakhir</h2>
                <Link href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
             </div>
             
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm flex flex-col">
+            <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
                <div className="bg-orange-50 border-b border-orange-100 px-4 py-3 flex items-center gap-2">
                  <FileWarning className="w-4 h-4 text-orange-600"/>
                  <h3 className="font-bold text-orange-900 text-sm">Pelanggaran Disiplin</h3>

@@ -17,19 +17,19 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Sidebar />
-      <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-20 md:pb-0 relative">
-        {/* Tombol Logout Global di Kanan Atas */}
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-20 md:pb-0 bg-gray-50/80">
         {user && (
-          <div className="absolute top-4 right-4 md:top-6 md:right-8 z-50">
+          <div className="sticky top-0 z-30 hidden md:flex h-16 items-center justify-end border-b border-gray-200 bg-white/90 px-8 backdrop-blur">
             <button 
               onClick={logout}
-              className="flex items-center gap-2 bg-white border border-gray-200 shadow-sm text-red-600 px-3 py-1.5 rounded-full text-xs font-bold hover:bg-red-50 transition-colors"
+              className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
             >
-              <LogOut className="w-3.5 h-3.5" /> Logout
+              <span className="max-w-[180px] truncate">{user.nama}</span>
+              <LogOut className="w-3.5 h-3.5 text-red-500" />
             </button>
           </div>
         )}
-        <main className="flex-1 p-4 md:p-8 max-w-[1400px] w-full mx-auto">
+        <main className="flex-1 p-4 md:p-8 max-w-[1440px] w-full mx-auto">
           {children}
         </main>
       </div>
