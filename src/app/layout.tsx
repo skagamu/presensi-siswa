@@ -51,6 +51,10 @@ export default function RootLayout({
             if ('caches' in window) {
               caches.keys().then(function(keys) {
                 keys.forEach(function(key) { caches.delete(key); });
+                if (keys.length && !sessionStorage.getItem('bk_cache_cleared')) {
+                  sessionStorage.setItem('bk_cache_cleared', '1');
+                  location.reload();
+                }
               });
             }
           `
