@@ -127,74 +127,84 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
           {/* TAB 1: LOG PRESENSI */}
           <TabsContent value="presensi" className="mt-3">
             {siswa.logs.length === 0 ? (
-              <div className="py-8 text-center text-xs text-gray-500">Tidak ada riwayat ketidakhadiran tercatat.</div>
+              <div className="py-8 text-center text-xs text-gray-500">Tidak ada riwayat presensi/absen tercatat.</div>
             ) : (
               <div className="border border-gray-200 rounded-md overflow-hidden">
                 <Table>
                   <TableHeader className="bg-gray-50">
                     <TableRow>
-                      <TableHead className="text-xs font-semibold w-32">Tanggal</TableHead>
-                      <TableHead className="text-xs font-semibold w-28">Status</TableHead>
-                      <TableHead className="text-xs font-semibold">Keterangan</TableHead>
+                      <TableHead className="text-xs font-semibold w-28">Tanggal</TableHead>
+                      <TableHead className="text-xs font-semibold w-24">Status</TableHead>
+                      <TableHead className="text-xs font-semibold">Keterangan / Dokumen</TableHead>
+                      <TableHead className="text-xs font-semibold w-28 text-right">Aksi</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {siswa.logs.map((log, i) => (
-                      <TableRow key={i} className="text-xs">
-                        <TableCell className="font-mono text-gray-600">{log.tanggal}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] font-bold ${
-                              log.status === "ALPHA"
-                                ? "bg-red-50 text-red-700 border-red-200"
-                                : log.status === "SAKIT"
-                                ? "bg-amber-50 text-amber-700 border-amber-200"
-                                : "bg-blue-50 text-blue-700 border-blue-200"
-                            }`}
-                          >
-                            {log.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-gray-600">
-                          {log.adaSurat ? (
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
-                              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                                Ada Surat Dokter / Bukti
+                    {siswa.logs.map((item, i) => {
+                      const isAlpha = item.status === "ALPHA" || item.status === "A";
+                      const isSakit = item.status === "SAKIT" || item.status === "S";
+                      const isIzin = item.status === "IZIN" || item.status === "I";
+
+                      return (
+                        <TableRow key={i} className="text-xs">
+                          <TableCell className="font-mono text-gray-600">{item.tanggal}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                isAlpha
+                                  ? "bg-red-50 text-red-700 border-red-200 font-bold"
+                                  : isSakit
+                                  ? "bg-amber-50 text-amber-700 border-amber-200 font-bold"
+                                  : isIzin
+                                  ? "bg-blue-50 text-blue-700 border-blue-200 font-bold"
+                                  : "bg-gray-50 text-gray-700"
+                              }
+                            >
+                              {item.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-gray-600">
+                            {isSakit && (
+                              <span className={item.adaSurat ? "text-emerald-700 font-medium" : "text-amber-700"}>
+                                {item.adaSurat ? "✓ Ber-surat Dokter" : "Tanpa Surat Dokter"}
                               </span>
-                              {log.linkBukti && log.linkBukti.startsWith("http") && (
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleOpenPreview(log.linkBukti!, `Bukti ${log.status} (${log.tanggal})`)}
-                                    className="h-5 px-1.5 text-[10px] font-semibold gap-1 text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
-                                  >
-                                    <Eye className="w-2.5 h-2.5" /> Preview
-                                  </Button>
-                                  <a
-                                    href={log.linkBukti}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[10px] text-gray-500 hover:text-blue-600 inline-flex items-center gap-0.5"
-                                  >
-                                    <ExternalLink className="w-2.5 h-2.5" /> Drive
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          ) : log.status === "SAKIT" ? (
-                            <span className="text-amber-700/80">Tanpa Surat Dokter</span>
-                          ) : log.status === "IZIN" ? (
-                            <span className="text-blue-700/80">Izin Tertulis / Lisan</span>
-                          ) : log.status === "ALPHA" ? (
-                            <span className="text-red-600 font-medium">Tanpa Keterangan</span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            )}
+                            {isIzin && (
+                              <span className={item.adaSurat ? "text-emerald-700 font-medium" : "text-blue-700"}>
+                                {item.adaSurat ? "✓ Ada Surat Izin" : "Izin Lisan/Pesan"}
+                              </span>
+                            )}
+                            {isAlpha && <span className="text-red-600 font-medium">Tanpa Keterangan</span>}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {item.linkBukti && item.linkBukti.startsWith("http") ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenPreview(item.linkBukti!, `Bukti Presensi - ${siswa.nama} (${item.tanggal})`)}
+                                  className="h-6 px-2 text-[11px] font-semibold gap-1 text-orange-700 bg-orange-50/50 border-orange-200 hover:bg-orange-100"
+                                >
+                                  <Eye className="w-3 h-3" /> Preview
+                                </Button>
+                                <a
+                                  href={item.linkBukti}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[11px] text-gray-500 hover:text-orange-600 inline-flex items-center"
+                                  title="Buka Tab Baru"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-[11px] italic">-</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -272,24 +282,37 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
       
         {/* MODAL PREVIEW BUKTI */}
         <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
-          <DialogContent className="max-w-3xl h-[85vh] p-0 overflow-hidden flex flex-col bg-gray-900 border-gray-800">
-            <div className="px-4 py-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between text-white shrink-0">
+          <DialogContent className="max-w-3xl h-[85vh] p-0 overflow-hidden flex flex-col bg-slate-900 border-slate-800 rounded-2xl [&>button]:hidden">
+            {/* Modal Header */}
+            <div className="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-white shrink-0">
               <div className="flex items-center gap-2 text-xs font-semibold truncate pr-4">
                 <FileText className="w-4 h-4 text-blue-400 shrink-0" />
                 <span className="truncate">{previewTitle || "Preview Berkas"}</span>
               </div>
-              {previewUrl && (
-                <a
-                  href={previewUrl.replace("/preview", "/view")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] text-blue-400 hover:underline inline-flex items-center gap-1 shrink-0 mr-6"
+              <div className="flex items-center gap-2 shrink-0">
+                {previewUrl && (
+                  <a
+                    href={previewUrl.replace("/preview", "/view")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-blue-400 hover:underline inline-flex items-center gap-1 font-semibold px-2 py-1 rounded bg-blue-950/50 border border-blue-800/60"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Buka Tab Baru
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPreviewUrl(null)}
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center transition active:scale-95 border border-slate-700"
+                  title="Tutup Preview"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> Buka Tab Baru
-                </a>
-              )}
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 w-full h-full bg-gray-100 relative">
+
+            {/* Modal Iframe Body */}
+            <div className="flex-1 w-full h-full bg-slate-100 relative">
               {previewUrl && (
                 <iframe
                   src={previewUrl}
@@ -298,6 +321,17 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                   allow="autoplay"
                 />
               )}
+            </div>
+
+            {/* Modal Footer Close Button (Sesuai Desain Ortu) */}
+            <div className="p-3 bg-slate-950 border-t border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setPreviewUrl(null)}
+                className="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+              >
+                <X className="w-4 h-4" /> Tutup Pratinjau
+              </button>
             </div>
           </DialogContent>
         </Dialog>
