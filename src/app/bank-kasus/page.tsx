@@ -7,9 +7,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { fetchGasApi } from "@/lib/api";
-import { Search, X, CheckSquare, Users } from "lucide-react";
+import { Search, X, CheckSquare, Users, Sparkles } from "lucide-react";
 
 interface Siswa {
   nis: string;
@@ -22,27 +23,67 @@ export default function BankKasusInputPage() {
   const [tingkat, setTingkat] = useState<string>("X");
   const [kelas, setKelas] = useState<string>("");
   const [daftarKelas, setDaftarKelas] = useState<string[]>([]);
-  const [semuaSiswa, setSemuaSiswa] = useState<Siswa[]>([]);
+  const [semuaSiswaCurrentTingkat, setSemuaSiswaCurrentTingkat] = useState<Siswa[]>([]);
+  const [allStudentsAllLevels, setAllStudentsAllLevels] = useState<Siswa[]>([]);
 
   const [isFetchingSiswa, setIsFetchingSiswa] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [pelanggaran, setPelanggaran] = useState<string>("");
   const [selectedNis, setSelectedNis] = useState<string[]>([]);
-  const [searchSiswa, setSearchSiswa] = useState<string>("");
+  const [searchSiswaGlobal, setSearchSiswaGlobal] = useState<string>("");
 
   const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
 
+  // 1. Preload semua siswa lintas tingkat (X, XI, XII) untuk global search
+  useEffect(() => {
+    const loadAllStudents = async () => {
+      try {
+        const levels = ["X", "XI", "XII"];
+        const promises = levels.map(async (lvl) => {
+          const sheetName = `Siswa_${lvl}`;
+          const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}&_v=${Date.now()}`;
+          const res = await fetch(gvizUrl);
+          const text = await res.text();
+          const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
+          if (match && match[1]) {
+            const json = JSON.parse(match[1]);
+            const rows = json.table.rows || [];
+            const list: Siswa[] = [];
+            rows.forEach((row: any) => {
+              const c = row.c;
+              if (c && c[1] && c[2] && c[3]) {
+                list.push({
+                  kelas: c[1].v?.toString() || "",
+                  nis: c[2].v?.toString() || "",
+                  nama: c[3].v?.toString() || "",
+                });
+              }
+            });
+            return list;
+          }
+          return [];
+        });
+
+        const results = await Promise.all(promises);
+        const combined = results.flat();
+        setAllStudentsAllLevels(combined);
+      } catch (e) {
+        console.error("Gagal preload data seluruh siswa", e);
+      }
+    };
+    loadAllStudents();
+  }, []);
+
+  // 2. Load siswa per tingkat untuk tab kelas reguler
   useEffect(() => {
     const loadStudents = async () => {
       setIsFetchingSiswa(true);
       setKelas("");
       setDaftarKelas([]);
-      setSelectedNis([]);
-      setSearchSiswa("");
       try {
         const sheetName = `Siswa_${tingkat}`;
-        const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}&_v=${new Date().getTime()}`;
+        const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}&_v=${Date.now()}`;
         const response = await fetch(gvizUrl);
         const text = await response.text();
         const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
@@ -61,7 +102,7 @@ export default function BankKasusInputPage() {
               });
             }
           });
-          setSemuaSiswa(students);
+          setSemuaSiswaCurrentTingkat(students);
           const uniqueClasses = Array.from(new Set(students.map((s) => s.kelas))).filter(Boolean).sort();
           setDaftarKelas(uniqueClasses);
           if (uniqueClasses.length > 0) setKelas(uniqueClasses[0]);
@@ -75,27 +116,36 @@ export default function BankKasusInputPage() {
     loadStudents();
   }, [tingkat]);
 
-  const filterSiswa = useMemo(() => {
-    return semuaSiswa.filter((s) => s.kelas === kelas);
-  }, [semuaSiswa, kelas]);
+  // Data yang ditampilkan: JIKA search aktif -> cari di SELURUH siswa (X, XI, XII)
+  // JIKA search kosong -> tampilkan siswa di kelas aktif
+  const isGlobalSearchActive = searchSiswaGlobal.trim().length > 0;
 
   const displayedSiswa = useMemo(() => {
-    const q = searchSiswa.toLowerCase().trim();
-    if (!q) return filterSiswa;
-    return filterSiswa.filter(
-      (s) => s.nama.toLowerCase().includes(q) || s.nis.toLowerCase().includes(q)
-    );
-  }, [filterSiswa, searchSiswa]);
+    if (isGlobalSearchActive) {
+      const q = searchSiswaGlobal.toLowerCase().trim();
+      const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
+      return pool.filter(
+        (s) =>
+          s.nama.toLowerCase().includes(q) ||
+          s.nis.toLowerCase().includes(q) ||
+          s.kelas.toLowerCase().includes(q)
+      );
+    }
+    return semuaSiswaCurrentTingkat.filter((s) => s.kelas === kelas);
+  }, [isGlobalSearchActive, searchSiswaGlobal, allStudentsAllLevels, semuaSiswaCurrentTingkat, kelas]);
 
   const toggleSiswa = (nis: string) => {
     setSelectedNis((prev) => (prev.includes(nis) ? prev.filter((n) => n !== nis) : [...prev, nis]));
   };
 
-  const toggleSemuaSiswa = () => {
-    if (selectedNis.length === filterSiswa.length) {
-      setSelectedNis([]);
+  const toggleSemuaDisplayed = () => {
+    const displayedNisList = displayedSiswa.map((s) => s.nis);
+    const allSelected = displayedNisList.every((nis) => selectedNis.includes(nis));
+
+    if (allSelected) {
+      setSelectedNis((prev) => prev.filter((n) => !displayedNisList.includes(n)));
     } else {
-      setSelectedNis(filterSiswa.map((s) => s.nis));
+      setSelectedNis((prev) => Array.from(new Set([...prev, ...displayedNisList])));
     }
   };
 
@@ -105,7 +155,8 @@ export default function BankKasusInputPage() {
     if (!pelanggaran.trim()) return toast.error("Tuliskan jenis pelanggaran yang dilakukan.");
 
     setIsSaving(true);
-    const selectedStudentsData = semuaSiswa.filter((s) => selectedNis.includes(s.nis));
+    const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
+    const selectedStudentsData = pool.filter((s) => selectedNis.includes(s.nis));
 
     try {
       const res = await fetchGasApi("saveBankKasus", {
@@ -117,7 +168,7 @@ export default function BankKasusInputPage() {
         toast.success(`${selectedStudentsData.length} data pelanggaran berhasil disimpan!`);
         setPelanggaran("");
         setSelectedNis([]);
-        setSearchSiswa("");
+        setSearchSiswaGlobal("");
       } else {
         toast.error("Error dari server: " + res.message);
       }
@@ -133,7 +184,7 @@ export default function BankKasusInputPage() {
       <div>
         <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-gray-950">Input Bank Kasus</h1>
         <p className="text-muted-foreground mt-1 text-xs md:text-sm">
-          Catat pelanggaran kedisiplinan siswa (Merokok, Terlambat, Atribut, dll) secara massal.
+          Catat pelanggaran kedisiplinan siswa lintas kelas dan tingkat secara massal.
         </p>
       </div>
 
@@ -160,94 +211,118 @@ export default function BankKasusInputPage() {
             </div>
           </div>
 
-          {/* PILIH TINGKAT & TABS KELAS */}
-          <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-t border-gray-100 pt-4 gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tingkat:</span>
-              <Select value={tingkat} onValueChange={(val) => setTingkat(val)} disabled={isFetchingSiswa}>
-                <SelectTrigger className="w-[110px] h-9 text-xs font-semibold bg-gray-50 border-gray-200">
-                  <SelectValue placeholder="Tingkat" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="X">Kelas X</SelectItem>
-                  <SelectItem value="XI">Kelas XI</SelectItem>
-                  <SelectItem value="XII">Kelas XII</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* QUICK ACTIONS & SUMMARY */}
-            <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-              <span className="text-xs font-medium text-gray-500">
-                Terpilih: <strong className="text-orange-700 font-bold">{selectedNis.length}</strong> siswa
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={toggleSemuaSiswa}
-                disabled={filterSiswa.length === 0}
-                className="h-8 text-xs font-semibold border-gray-200"
-              >
-                <CheckSquare className="w-3.5 h-3.5 mr-1" />
-                {selectedNis.length === filterSiswa.length && filterSiswa.length > 0 ? "Batal Semua" : "Pilih Semua"}
-              </Button>
-            </div>
-          </div>
-
-          {/* TAB KELAS */}
-          {daftarKelas.length > 0 && !isFetchingSiswa && (
-            <div className="w-full border-t border-gray-100 px-2 sm:px-0">
-              <div className="flex overflow-x-auto scrollbar-hide pt-1">
-                {daftarKelas.map((kls) => {
-                  const isActive = kelas === kls;
-                  return (
-                    <button
-                      key={kls}
-                      onClick={() => {
-                        setKelas(kls);
-                        setSearchSiswa("");
-                      }}
-                      className={`relative px-5 py-3 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors outline-none ${
-                        isActive ? "text-primary font-bold" : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      {kls}
-                      {isActive && <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-lg" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* SEARCH BAR SISWA DALAM KELAS */}
+          {/* GLOBAL SEARCH BAR LINTAS TINGKAT & KELAS */}
           <div className="relative w-full pt-1">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
-              value={searchSiswa}
-              onChange={(e) => setSearchSiswa(e.target.value)}
-              placeholder={`Cari nama atau NIS siswa di kelas ${kelas || ""}...`}
-              className="pl-9 pr-8 h-9 text-xs sm:text-sm bg-gray-50/80 border-gray-200 focus:bg-white"
+              value={searchSiswaGlobal}
+              onChange={(e) => setSearchSiswaGlobal(e.target.value)}
+              placeholder="🔍 Cari nama atau NIS siswa lintas semua kelas (X, XI, XII)..."
+              className="pl-9 pr-8 h-10 text-xs sm:text-sm bg-orange-50/40 border-orange-200 focus:bg-white focus:border-orange-500 font-medium"
             />
-            {searchSiswa && (
+            {searchSiswaGlobal && (
               <button
-                onClick={() => setSearchSiswa("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
+                onClick={() => setSearchSiswaGlobal("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
+
+          {/* KONDISIONAL: JIKA TIDAK SEDANG GLOBAL SEARCH -> TAMPILKAN PILIH TINGKAT & TABS KELAS */}
+          {!isGlobalSearchActive ? (
+            <>
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-t border-gray-100 pt-3 gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tingkat:</span>
+                  <Select value={tingkat} onValueChange={(val) => setTingkat(val)} disabled={isFetchingSiswa}>
+                    <SelectTrigger className="w-[110px] h-9 text-xs font-semibold bg-gray-50 border-gray-200">
+                      <SelectValue placeholder="Tingkat" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="X">Kelas X</SelectItem>
+                      <SelectItem value="XI">Kelas XI</SelectItem>
+                      <SelectItem value="XII">Kelas XII</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+                  <span className="text-xs font-medium text-gray-500">
+                    Terpilih: <strong className="text-orange-700 font-bold">{selectedNis.length}</strong> siswa
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSemuaDisplayed}
+                    disabled={displayedSiswa.length === 0}
+                    className="h-8 text-xs font-semibold border-gray-200"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 mr-1" />
+                    Pilih Semua di Kelas
+                  </Button>
+                </div>
+              </div>
+
+              {daftarKelas.length > 0 && !isFetchingSiswa && (
+                <div className="w-full border-t border-gray-100 px-2 sm:px-0">
+                  <div className="flex overflow-x-auto scrollbar-hide pt-1">
+                    {daftarKelas.map((kls) => {
+                      const isActive = kelas === kls;
+                      return (
+                        <button
+                          key={kls}
+                          onClick={() => setKelas(kls)}
+                          className={`relative px-5 py-2.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors outline-none ${
+                            isActive ? "text-primary font-bold" : "text-gray-500 hover:text-gray-800"
+                          }`}
+                        >
+                          {kls}
+                          {isActive && (
+                            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-lg" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center justify-between border-t border-orange-100 pt-2 text-xs">
+              <span className="text-orange-950 font-semibold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-orange-600" />
+                Hasil pencarian lintas semua tingkat ({displayedSiswa.length} siswa ditemukan)
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">
+                  Terpilih: <strong className="text-orange-700">{selectedNis.length}</strong>
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleSemuaDisplayed}
+                  className="h-7 text-xs font-semibold border-orange-200 text-orange-900 bg-orange-50/50"
+                >
+                  Pilih Semua Hasil
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* MOBILE VIEW */}
+        {/* MOBILE LIST VIEW */}
         <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[300px] pb-32">
           {isFetchingSiswa ? (
             <div className="h-48 grid place-items-center text-sm text-muted-foreground">Sedang memuat data siswa...</div>
           ) : displayedSiswa.length === 0 ? (
             <div className="h-48 grid place-items-center text-center p-6 text-sm text-muted-foreground">
-              {searchSiswa ? "Tidak ada siswa yang sesuai kata kunci pencarian." : "Tidak ada data siswa."}
+              {isGlobalSearchActive
+                ? `Tidak ada siswa yang cocok dengan "${searchSiswaGlobal}" di seluruh tingkat.`
+                : "Tidak ada data siswa pada kelas ini."}
             </div>
           ) : (
             displayedSiswa.map((siswa) => {
@@ -268,7 +343,7 @@ export default function BankKasusInputPage() {
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-semibold leading-snug text-gray-950">{siswa.nama}</div>
                     <div className="mt-1 text-[11px] text-gray-500 font-medium">
-                      NIS: {siswa.nis} • {siswa.kelas}
+                      NIS: {siswa.nis} • <span className="font-bold text-gray-800">{siswa.kelas}</span>
                     </div>
                   </div>
                 </button>
@@ -284,13 +359,16 @@ export default function BankKasusInputPage() {
               <TableRow>
                 <TableHead className="w-[50px] text-center border-r border-gray-200 font-medium">
                   <Checkbox
-                    checked={filterSiswa.length > 0 && selectedNis.length === filterSiswa.length}
-                    onCheckedChange={toggleSemuaSiswa}
+                    checked={
+                      displayedSiswa.length > 0 &&
+                      displayedSiswa.every((s) => selectedNis.includes(s.nis))
+                    }
+                    onCheckedChange={toggleSemuaDisplayed}
                   />
                 </TableHead>
                 <TableHead className="w-[120px] font-medium border-r border-gray-200">NIS</TableHead>
                 <TableHead className="min-w-[200px] font-medium border-r border-gray-200">Nama Siswa</TableHead>
-                <TableHead className="w-[120px] text-center font-medium">Kelas</TableHead>
+                <TableHead className="w-[140px] text-center font-medium">Kelas</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -303,9 +381,9 @@ export default function BankKasusInputPage() {
               ) : displayedSiswa.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-48 text-center text-muted-foreground">
-                    {searchSiswa
-                      ? "Tidak ada siswa yang sesuai dengan kata kunci pencarian."
-                      : "Tidak ada data siswa."}
+                    {isGlobalSearchActive
+                      ? `Tidak ada siswa yang cocok dengan "${searchSiswaGlobal}" di seluruh tingkat.`
+                      : "Tidak ada data siswa pada kelas ini."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -326,8 +404,10 @@ export default function BankKasusInputPage() {
                       <TableCell className="border-r border-gray-200">
                         <div className="font-semibold text-gray-900 leading-tight">{siswa.nama}</div>
                       </TableCell>
-                      <TableCell className="text-center text-xs font-medium text-gray-600">
-                        {siswa.kelas}
+                      <TableCell className="text-center">
+                        <Badge variant="secondary" className="font-semibold text-xs bg-gray-100 text-gray-700">
+                          {siswa.kelas}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   );
