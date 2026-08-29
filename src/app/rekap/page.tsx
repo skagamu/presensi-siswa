@@ -11,6 +11,7 @@ import { Copy, Download, Image as ImageIcon } from "lucide-react";
 import {
   ReportConfig,
   ReportItem,
+  DayInfo,
   downloadReportImage,
   copyReportImageToClipboard,
 } from "@/lib/reportImage";
@@ -27,10 +28,10 @@ interface RekapRow {
 }
 
 export default function RekapitulasiMatrixPage() {
-  const [mode, setMode] = useState<"BULANAN" | "HARIAN">("BULANAN");
+  const [mode, setMode] = useState<"BULANAN" | "MINGGUAN" | "HARIAN">("MINGGUAN");
   const [bulan, setBulan] = useState(new Date().toISOString().substring(0, 7));
   const [tanggalHarian, setTanggalHarian] = useState(new Date().toISOString().substring(0, 10));
-  const [tingkat, setTingkat] = useState("X");
+  const [tingkat, setTingkat] = useState("XI");
   const [kelasFilter, setKelasFilter] = useState("SEMUA");
   const [statusFilter, setStatusFilter] = useState("SEMUA");
 
@@ -51,6 +52,39 @@ export default function RekapitulasiMatrixPage() {
   const daysArray = useMemo(() => {
     return Array.from({ length: daysInMonth }, (_, i) => i + 1);
   }, [daysInMonth]);
+
+  // Compute 5-day week (Senin..Jumat) from tanggalHarian
+  const weekInfo = useMemo(() => {
+    const d = new Date(`${tanggalHarian}T00:00:00`);
+    const day = d.getDay(); // 0 = Sunday, 1 = Monday, ...
+    const diffToMonday = (day === 0 ? -6 : 1) - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+
+    const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const dayNames = ["Senin", "Selasa", "Rabu", "Kamis", "Jum'at"];
+    const days: DayInfo[] = [];
+
+    for (let i = 0; i < 5; i++) {
+      const cur = new Date(monday);
+      cur.setDate(monday.getDate() + i);
+      const dayNum = cur.getDate();
+      const monthNum = cur.getMonth() + 1;
+      days.push({
+        dateObj: cur,
+        dayIndex: cur.getDate(),
+        dayName: dayNames[i],
+        dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
+        dateFull: cur.toISOString().split("T")[0],
+      });
+    }
+
+    const first = days[0];
+    const last = days[4];
+    const periodeMinggu = `PERIODE ${first.dayIndex} ${monthNames[first.dateObj.getMonth()]} - ${last.dayIndex} ${monthNames[last.dateObj.getMonth()]}`.toUpperCase();
+
+    return { days, periodeMinggu };
+  }, [tanggalHarian]);
 
   const daftarKelas = useMemo(() => {
     const classes = Array.from(new Set(dataRekap.map((s) => s.kelas))).filter(Boolean);
@@ -122,7 +156,7 @@ export default function RekapitulasiMatrixPage() {
     if (kelasFilter !== "SEMUA") filtered = filtered.filter((s) => s.kelas === kelasFilter);
     if (statusFilter !== "SEMUA") {
       filtered = filtered.filter((s) => {
-        if (mode === "BULANAN") {
+        if (mode === "BULANAN" || mode === "MINGGUAN") {
           if (statusFilter === "TIDAK HADIR") return s.sakit > 0 || s.izin > 0 || s.alpha > 0;
           if (statusFilter === "SAKIT" && s.sakit > 0) return true;
           if (statusFilter === "IZIN" && s.izin > 0) return true;
@@ -193,7 +227,7 @@ export default function RekapitulasiMatrixPage() {
     toast.success("Rekap harian disalin ke clipboard.");
   };
 
-  // Helper to build report config for image generation
+  // Helper to build report config based on current active mode (HARIAN, MINGGUAN, BULANAN)
   const buildReportConfig = (): ReportConfig => {
     const dateObj = new Date(`${tanggalHarian}T00:00:00`);
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu"];
@@ -208,15 +242,43 @@ export default function RekapitulasiMatrixPage() {
 
     const dateInt = parseInt(tanggalHarian.split("-")[2], 10);
 
-    // Filter students who are absent on this day, or who have any absence
-    const targetStudents = absentDailyData.length > 0 ? absentDailyData : displayedData.filter((s) => s.sakit > 0 || s.izin > 0 || s.alpha > 0);
+    // Target students filter
+    let targetStudents: RekapRow[] = [];
+    if (mode === "HARIAN") {
+      targetStudents = absentDailyData.length > 0 ? absentDailyData : displayedData.filter((s) => s.sakit > 0 || s.izin > 0 || s.alpha > 0);
+    } else {
+      // Mingguan or Bulanan: show all students with any absence in the dataset
+      targetStudents = displayedData.filter((s) => s.sakit > 0 || s.izin > 0 || s.alpha > 0 || (s.totalTidakHadir && s.totalTidakHadir > 0));
+      if (targetStudents.length === 0) targetStudents = displayedData;
+    }
 
     const items: ReportItem[] = targetStudents.map((s, idx) => {
+      // Status today
       const statTodayRaw = (s.dailyLogs[String(dateInt)] || "-").toUpperCase().trim();
       let statusToday = "-";
       if (statTodayRaw === "SAKIT") statusToday = "S";
       else if (statTodayRaw === "IZIN") statusToday = "I";
       else if (statTodayRaw === "ALPHA") statusToday = "A";
+
+      // Weekly statuses (5 days)
+      const weeklyStatuses = weekInfo.days.map((wd) => {
+        const raw = (s.dailyLogs[String(wd.dayIndex)] || "").toUpperCase().trim();
+        if (raw === "SAKIT") return "S";
+        if (raw === "IZIN") return "I";
+        if (raw === "ALPHA") return "A";
+        if (raw === "HADIR") return "H";
+        return "-";
+      });
+
+      // Monthly statuses (1..daysInMonth)
+      const monthlyStatuses = daysArray.map((d) => {
+        const raw = (s.dailyLogs[String(d)] || "").toUpperCase().trim();
+        if (raw === "SAKIT") return "S";
+        if (raw === "IZIN") return "I";
+        if (raw === "ALPHA") return "A";
+        if (raw === "HADIR") return "H";
+        return "";
+      });
 
       return {
         no: idx + 1,
@@ -224,6 +286,8 @@ export default function RekapitulasiMatrixPage() {
         nis: s.nis,
         nama: s.nama,
         statusToday,
+        weeklyStatuses,
+        monthlyStatuses,
         sakit: s.sakit || 0,
         izin: s.izin || 0,
         alpa: s.alpha || 0,
@@ -232,13 +296,16 @@ export default function RekapitulasiMatrixPage() {
     });
 
     return {
+      mode,
       tingkat: tingkat === "SEMUA" ? "SEMUA TINGKAT" : tingkat,
       bulanTahun,
-      hariTanggal: `${namaHari}, ${dd} ${monthNames[dateObj.getMonth()]} ${dateObj.getFullYear()}`,
       namaHari,
       tanggalSingkat,
-      totalTidakHadir: targetStudents.length,
-      totalSiswa: dataRekap.length > 0 ? dataRekap.length : targetStudents.length,
+      periodeMinggu: weekInfo.periodeMinggu,
+      weekDays: weekInfo.days,
+      daysInMonth,
+      totalTidakHadir: items.length,
+      totalSiswa: dataRekap.length > 0 ? dataRekap.length : items.length,
       items,
     };
   };
@@ -249,7 +316,7 @@ export default function RekapitulasiMatrixPage() {
     try {
       const config = buildReportConfig();
       await downloadReportImage(config);
-      toast.success("Gambar laporan presensi berhasil diunduh.");
+      toast.success(`Gambar laporan presensi (${mode}) berhasil diunduh.`);
     } catch (e) {
       console.error(e);
       toast.error("Gagal men-generate gambar.");
@@ -265,7 +332,7 @@ export default function RekapitulasiMatrixPage() {
       const config = buildReportConfig();
       const success = await copyReportImageToClipboard(config);
       if (success) {
-        toast.success("Gambar laporan disalin! Bisa langsung Paste (Ctrl+V) ke WhatsApp.");
+        toast.success(`Gambar laporan (${mode}) disalin! Bisa langsung Paste (Ctrl+V) ke WhatsApp.`);
       } else {
         toast.error("Browser tidak mengizinkan salin gambar otomatis. Gunakan tombol Unduh Gambar.");
       }
@@ -311,7 +378,7 @@ export default function RekapitulasiMatrixPage() {
               className="h-9 text-xs font-bold border-orange-200 text-orange-950 bg-orange-50/50 hover:bg-orange-100 shadow-sm"
             >
               <ImageIcon className="w-3.5 h-3.5 mr-1.5 text-orange-700" />
-              Salin Gambar WA
+              Salin Gambar ({mode})
             </Button>
             <Button
               onClick={handleDownloadImage}
@@ -321,12 +388,12 @@ export default function RekapitulasiMatrixPage() {
               className="h-9 text-xs font-bold border-green-300 text-green-950 bg-green-50/60 hover:bg-green-100 shadow-sm"
             >
               <Download className="w-3.5 h-3.5 mr-1.5 text-green-700" />
-              Unduh Gambar (PNG)
+              Unduh Gambar ({mode})
             </Button>
           </div>
         </div>
 
-        {/* CONTROLS */}
+        {/* CONTROLS (3 TABS: BULANAN | MINGGUAN | HARIAN) */}
         <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center justify-between gap-3">
           <div className="flex bg-gray-100 p-1 rounded-lg w-full sm:w-auto shadow-inner">
             <button
@@ -334,7 +401,7 @@ export default function RekapitulasiMatrixPage() {
                 setMode("BULANAN");
                 setStatusFilter("SEMUA");
               }}
-              className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${
+              className={`flex-1 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 mode === "BULANAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"
               }`}
             >
@@ -342,10 +409,21 @@ export default function RekapitulasiMatrixPage() {
             </button>
             <button
               onClick={() => {
+                setMode("MINGGUAN");
+                setStatusFilter("SEMUA");
+              }}
+              className={`flex-1 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                mode === "MINGGUAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"
+              }`}
+            >
+              Matrix Mingguan
+            </button>
+            <button
+              onClick={() => {
                 setMode("HARIAN");
                 setStatusFilter("SEMUA");
               }}
-              className={`flex-1 sm:px-5 py-1.5 text-xs font-semibold rounded-md transition-all ${
+              className={`flex-1 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
                 mode === "HARIAN" ? "bg-white text-primary shadow-sm ring-1 ring-black/5" : "text-gray-500"
               }`}
             >
@@ -470,6 +548,15 @@ export default function RekapitulasiMatrixPage() {
         </div>
       )}
 
+      {mode === "MINGGUAN" && (
+        <div className="bg-orange-50/60 border border-orange-200 rounded-md p-3 text-xs text-orange-950 flex items-center justify-between">
+          <span>
+            Menampilkan ringkasan mingguan: <strong>{weekInfo.periodeMinggu}</strong>
+          </span>
+          <span className="text-[11px] text-orange-700 font-semibold">(5 Hari: Senin s.d. Jum&apos;at)</span>
+        </div>
+      )}
+
       <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         {/* FILTER BAR */}
         <div className="px-4 sm:px-6 pt-4 sm:pt-6 pb-0 flex flex-col gap-4">
@@ -576,7 +663,7 @@ export default function RekapitulasiMatrixPage() {
             <div className="h-48 grid place-items-center text-sm text-muted-foreground">Tidak ada siswa yang sesuai filter.</div>
           ) : (
             displayedData.map((siswa, idx) => {
-              const isCritical = mode === "BULANAN" && siswa.totalTidakHadir >= 3;
+              const isCritical = siswa.totalTidakHadir >= 3;
               const dateInt = parseInt(tanggalHarian.split("-")[2], 10);
               const statHariIni = (siswa.dailyLogs[String(dateInt)] || "HADIR").toUpperCase().trim();
 
@@ -613,22 +700,20 @@ export default function RekapitulasiMatrixPage() {
                     )}
                   </div>
 
-                  {mode === "BULANAN" && (
-                    <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-gray-50">
-                      <div className="rounded-md bg-blue-50 p-2 text-xs font-semibold text-blue-700">
-                        Sakit<br />
-                        <span className="text-base text-blue-900">{siswa.sakit}</span>
-                      </div>
-                      <div className="rounded-md bg-yellow-50 p-2 text-xs font-semibold text-yellow-700">
-                        Izin<br />
-                        <span className="text-base text-yellow-900">{siswa.izin}</span>
-                      </div>
-                      <div className="rounded-md bg-red-50 p-2 text-xs font-semibold text-red-700">
-                        Alpha<br />
-                        <span className="text-base text-red-900">{siswa.alpha}</span>
-                      </div>
+                  <div className="grid grid-cols-3 gap-2 text-center pt-2 border-t border-gray-50">
+                    <div className="rounded-md bg-blue-50 p-2 text-xs font-semibold text-blue-700">
+                      Sakit<br />
+                      <span className="text-base text-blue-900">{siswa.sakit}</span>
                     </div>
-                  )}
+                    <div className="rounded-md bg-yellow-50 p-2 text-xs font-semibold text-yellow-700">
+                      Izin<br />
+                      <span className="text-base text-yellow-900">{siswa.izin}</span>
+                    </div>
+                    <div className="rounded-md bg-red-50 p-2 text-xs font-semibold text-red-700">
+                      Alpha<br />
+                      <span className="text-base text-red-900">{siswa.alpha}</span>
+                    </div>
+                  </div>
                 </div>
               );
             })
@@ -643,7 +728,7 @@ export default function RekapitulasiMatrixPage() {
                 <TableHead className="w-[40px] text-center border-r border-gray-200 font-semibold">No</TableHead>
                 <TableHead className="min-w-[180px] border-r border-gray-200 font-semibold">Nama Siswa</TableHead>
 
-                {mode === "BULANAN" ? (
+                {mode === "BULANAN" && (
                   <>
                     {daysArray.map((day) => (
                       <TableHead
@@ -657,7 +742,29 @@ export default function RekapitulasiMatrixPage() {
                       Tot
                     </TableHead>
                   </>
-                ) : (
+                )}
+
+                {mode === "MINGGUAN" && (
+                  <>
+                    {weekInfo.days.map((wd) => (
+                      <TableHead
+                        key={`hw-${wd.dayIndex}`}
+                        className="min-w-[55px] text-center border-r border-gray-200 px-1 text-xs"
+                      >
+                        <div>{wd.dayName}</div>
+                        <div className="text-[10px] text-gray-500 font-normal">{wd.dateShort}</div>
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-center font-semibold bg-yellow-50/50 text-amber-900 min-w-[45px]">S</TableHead>
+                    <TableHead className="text-center font-semibold bg-cyan-50/50 text-cyan-900 min-w-[45px]">I</TableHead>
+                    <TableHead className="text-center font-semibold bg-red-50/50 text-red-900 min-w-[45px]">A</TableHead>
+                    <TableHead className="text-center font-bold border-l border-gray-200 bg-gray-100 min-w-[45px]">
+                      Tot
+                    </TableHead>
+                  </>
+                )}
+
+                {mode === "HARIAN" && (
                   <TableHead className="text-center font-semibold">Status pada {tanggalHarian}</TableHead>
                 )}
               </TableRow>
@@ -666,7 +773,7 @@ export default function RekapitulasiMatrixPage() {
               {isFetching ? (
                 <TableRow>
                   <TableCell
-                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : 3}
+                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : mode === "MINGGUAN" ? 11 : 3}
                     className="h-64 text-center text-muted-foreground"
                   >
                     Mencari data ke Spreadsheet...
@@ -675,7 +782,7 @@ export default function RekapitulasiMatrixPage() {
               ) : displayedData.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : 3}
+                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : mode === "MINGGUAN" ? 11 : 3}
                     className="h-64 text-center text-muted-foreground"
                   >
                     Tidak ada siswa yang sesuai dengan filter.
@@ -683,7 +790,7 @@ export default function RekapitulasiMatrixPage() {
                 </TableRow>
               ) : (
                 displayedData.map((siswa, idx) => {
-                  const isCritical = mode === "BULANAN" && siswa.totalTidakHadir >= 3;
+                  const isCritical = siswa.totalTidakHadir >= 3;
 
                   return (
                     <TableRow
@@ -700,7 +807,7 @@ export default function RekapitulasiMatrixPage() {
                         <div className="text-[10px] text-gray-500 mt-0.5">{siswa.kelas}</div>
                       </TableCell>
 
-                      {mode === "BULANAN" ? (
+                      {mode === "BULANAN" && (
                         <>
                           {daysArray.map((day) => (
                             <TableCell
@@ -714,7 +821,34 @@ export default function RekapitulasiMatrixPage() {
                             {siswa.totalTidakHadir > 0 ? siswa.totalTidakHadir : "-"}
                           </TableCell>
                         </>
-                      ) : (
+                      )}
+
+                      {mode === "MINGGUAN" && (
+                        <>
+                          {weekInfo.days.map((wd) => (
+                            <TableCell
+                              key={`cw-${siswa.nis}-${wd.dayIndex}`}
+                              className={`p-0 border-r border-gray-200 text-center align-middle border-b-0`}
+                            >
+                              {renderCellContent(siswa.dailyLogs[String(wd.dayIndex)], wd.dayIndex)}
+                            </TableCell>
+                          ))}
+                          <TableCell className="text-center font-semibold text-amber-800 bg-yellow-50/30">
+                            {siswa.sakit > 0 ? siswa.sakit : "-"}
+                          </TableCell>
+                          <TableCell className="text-center font-semibold text-cyan-800 bg-cyan-50/30">
+                            {siswa.izin > 0 ? siswa.izin : "-"}
+                          </TableCell>
+                          <TableCell className="text-center font-semibold text-red-700 bg-red-50/30">
+                            {siswa.alpha > 0 ? siswa.alpha : "-"}
+                          </TableCell>
+                          <TableCell className="text-center font-bold border-l border-gray-200 bg-gray-50/50 py-2 text-red-600">
+                            {siswa.totalTidakHadir > 0 ? siswa.totalTidakHadir : "-"}
+                          </TableCell>
+                        </>
+                      )}
+
+                      {mode === "HARIAN" && (
                         <TableCell className="text-center py-2">
                           {(() => {
                             const dateInt = parseInt(tanggalHarian.split("-")[2], 10);
