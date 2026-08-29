@@ -4,7 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { User, Calendar, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { User, Calendar, AlertTriangle, CheckCircle, Clock, ExternalLink, FileText, Eye, X } from "lucide-react";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export interface LogPresensiItem {
   tanggal: string;
@@ -22,6 +24,7 @@ export interface PenyelesaianItem {
   tanggal: string;
   tindakan: string;
   guru: string;
+  linkPdf?: string;
 }
 
 export interface SiswaDetailData {
@@ -45,9 +48,25 @@ interface SiswaDetailModalProps {
 }
 
 export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalProps) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState<string>("");
+
   if (!siswa) return null;
 
   const totalAbsen = siswa.totalAlpha + siswa.totalSakit + siswa.totalIzin;
+
+  const getEmbedUrl = (url: string) => {
+    if (!url) return "";
+    if (url.includes("drive.google.com/file/d/")) {
+      return url.replace(/\/view.*$/, "/preview");
+    }
+    return url;
+  };
+
+  const handleOpenPreview = (url: string, title: string) => {
+    setPreviewUrl(getEmbedUrl(url));
+    setPreviewTitle(title);
+  };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -139,19 +158,31 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                         </TableCell>
                         <TableCell className="text-gray-600">
                           {log.adaSurat ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                              Ada Surat Dokter / Bukti
-                              {log.linkBukti && (
-                                <a
-                                  href={log.linkBukti}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:underline inline-flex items-center ml-1 text-[11px]"
-                                >
-                                  (Lihat Berkas)
-                                </a>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                                Ada Surat Dokter / Bukti
+                              </span>
+                              {log.linkBukti && log.linkBukti.startsWith("http") && (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenPreview(log.linkBukti!, `Bukti ${log.status} (${log.tanggal})`)}
+                                    className="h-5 px-1.5 text-[10px] font-semibold gap-1 text-blue-700 bg-blue-50 border-blue-200 hover:bg-blue-100"
+                                  >
+                                    <Eye className="w-2.5 h-2.5" /> Preview
+                                  </Button>
+                                  <a
+                                    href={log.linkBukti}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-gray-500 hover:text-blue-600 inline-flex items-center gap-0.5"
+                                  >
+                                    <ExternalLink className="w-2.5 h-2.5" /> Drive
+                                  </a>
+                                </div>
                               )}
-                            </span>
+                            </div>
                           ) : log.status === "SAKIT" ? (
                             <span className="text-amber-700/80">Tanpa Surat Dokter</span>
                           ) : log.status === "IZIN" ? (
@@ -212,12 +243,64 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                       <span className="font-medium text-gray-700">Oleh: {item.guru}</span>
                     </div>
                     <p className="text-gray-900 font-semibold">{item.tindakan}</p>
+                    {item.linkPdf && item.linkPdf.startsWith("http") && (
+                      <div className="pt-1 flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenPreview(item.linkPdf!, `Bukti Kasus - ${item.tindakan}`)}
+                          className="h-6 px-2 text-[11px] font-semibold gap-1 text-blue-700 bg-blue-50/50 border-blue-200 hover:bg-blue-100"
+                        >
+                          <Eye className="w-3 h-3" /> Preview Berkas
+                        </Button>
+                        <a
+                          href={item.linkPdf}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-gray-500 hover:text-blue-600 flex items-center gap-0.5"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Buka di Drive
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </TabsContent>
         </Tabs>
+      
+        {/* MODAL PREVIEW BUKTI */}
+        <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
+          <DialogContent className="max-w-3xl h-[85vh] p-0 overflow-hidden flex flex-col bg-gray-900 border-gray-800">
+            <div className="px-4 py-3 bg-gray-950 border-b border-gray-800 flex items-center justify-between text-white shrink-0">
+              <div className="flex items-center gap-2 text-xs font-semibold truncate pr-4">
+                <FileText className="w-4 h-4 text-blue-400 shrink-0" />
+                <span className="truncate">{previewTitle || "Preview Berkas"}</span>
+              </div>
+              {previewUrl && (
+                <a
+                  href={previewUrl.replace("/preview", "/view")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] text-blue-400 hover:underline inline-flex items-center gap-1 shrink-0 mr-6"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Buka Tab Baru
+                </a>
+              )}
+            </div>
+            <div className="flex-1 w-full h-full bg-gray-100 relative">
+              {previewUrl && (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full border-none"
+                  title="Dokumen Bukti"
+                  allow="autoplay"
+                />
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

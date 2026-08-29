@@ -36,6 +36,7 @@ interface RawPenyelesaian {
   tanggal: string;
   tindakan: string;
   guru: string;
+  linkPdf?: string;
 }
 
 export default function DataSiswaPage() {
@@ -151,6 +152,7 @@ export default function DataSiswaPage() {
             if (c && c[2]) {
               list.push({
                 nis: String(c[2].v || "").trim(),
+                linkPdf: c[5]?.v ? String(c[5].v) : undefined,
                 tindakan: String(c[6]?.v || ""),
                 guru: String(c[7]?.v || ""),
                 tanggal: c[8]?.f || c[8]?.v || "",
