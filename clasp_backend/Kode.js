@@ -440,16 +440,14 @@ const SpreadsheetRepository = {
           sheet.getRange(i + 1, 7).setValue(adaDokter);
           if (linkBukti) {
             sheet.getRange(i + 1, 8).setValue(linkBukti);
-            sheet.getRange(i + 1, 9).setValue(timestamp);
-          } else {
-            sheet.getRange(i + 1, 8).setValue(timestamp);
           }
+          sheet.getRange(i + 1, 9).setValue(timestamp);
           isFound = true;
           break;
         }
       }
       if(!isFound) {
-        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, adaDokter, linkBukti || timestamp, linkBukti ? timestamp : ""]);
+        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, adaDokter, linkBukti, timestamp]);
       }
     });
 
