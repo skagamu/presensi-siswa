@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AlertTriangle, RefreshCw, ArrowRight, Printer, UploadCloud } from "lucide-react";
 import { fetchGasApi } from "@/lib/api";
+import { generateSuratTugasDocx } from "@/lib/docxGenerator";
+import { FileDown } from "lucide-react";
 
 interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
 
@@ -132,7 +134,7 @@ export default function SemuaAlertPage() {
                     <span className="text-[11px] text-gray-500 truncate">{getTindakanInfo(alert.tingkatKumulatif)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" className="h-9 rounded-md text-xs"><Printer className="mr-1.5 h-3.5 w-3.5" />Surat</Button>
+                    <Button variant="outline" size="sm" onClick={() => generateSuratTugasDocx(alert)} className="h-9 rounded-md text-xs text-blue-700 border-blue-200 hover:bg-blue-50 font-semibold"><FileDown className="mr-1.5 h-3.5 w-3.5" />Surat (.docx)</Button>
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button size="sm" className={`h-9 rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}`}>Upload Bukti</Button>
@@ -194,8 +196,8 @@ export default function SemuaAlertPage() {
                       </TableCell>
                       <TableCell className="text-right pr-4">
                         <div className="flex items-center justify-end gap-2">
-                           <Button variant="outline" size="sm" className="h-8 px-3 gap-1.5 text-gray-700 border-gray-200 rounded-md text-xs">
-                             <Printer className="w-3.5 h-3.5 hidden sm:block" /><span>Print Surat Tugas</span>
+                           <Button variant="outline" size="sm" onClick={() => generateSuratTugasDocx(alert)} className="h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs font-semibold">
+                             <FileDown className="w-3.5 h-3.5" /><span className="truncate">Unduh Surat (.docx)</span>
                            </Button>
 
                            <Dialog>
@@ -212,7 +214,7 @@ export default function SemuaAlertPage() {
                                 <div className="space-y-4 py-4">
                                   <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2">
                                     <p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p>
-                                    <Button variant="outline" size="sm" type="button" className="w-fit h-8 text-xs gap-2"><Printer className="w-3 h-3" /> Print Surat Tugas</Button>
+                                    <Button variant="outline" size="sm" type="button" onClick={() => generateSuratTugasDocx(alert)} className="w-fit h-8 text-xs gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 font-semibold"><FileDown className="w-3 h-3" /> Unduh Surat Tugas (.docx)</Button>
                                   </div>
                                   <div className="space-y-2 pt-2"><Label htmlFor="file">Upload File Bukti (.pdf)</Label><Input id="file" type="file" accept=".pdf" /></div>
                                   <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>

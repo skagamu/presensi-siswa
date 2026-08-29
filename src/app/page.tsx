@@ -218,8 +218,8 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:flex md:items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 w-full md:w-auto">
-                        <Button variant="outline" size="sm" className="h-9 md:h-8 px-3 gap-1.5 text-gray-700 border-gray-200 rounded-md text-xs sm:text-sm">
-                          <Printer className="w-3.5 h-3.5" /><span className="truncate">Surat</span>
+                        <Button variant="outline" size="sm" onClick={() => generateSuratTugasDocx(alert)} className="h-9 md:h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs sm:text-sm font-semibold">
+                          <FileDown className="w-3.5 h-3.5" /><span className="truncate">Surat (.docx)</span>
                         </Button>
                         <Dialog>
                           <DialogTrigger asChild>
