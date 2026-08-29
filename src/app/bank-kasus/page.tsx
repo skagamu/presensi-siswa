@@ -129,14 +129,18 @@ export default function BankKasusInputPage() {
     if (isGlobalSearchActive) {
       const q = searchSiswaGlobal.toLowerCase().trim();
       const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
-      return pool.filter(
-        (s) =>
-          s.nama.toLowerCase().includes(q) ||
-          s.nis.toLowerCase().includes(q) ||
-          s.kelas.toLowerCase().includes(q)
-      );
+      return pool
+        .filter(
+          (s) =>
+            s.nama.toLowerCase().includes(q) ||
+            s.nis.toLowerCase().includes(q) ||
+            s.kelas.toLowerCase().includes(q)
+        )
+        .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
     }
-    return semuaSiswaCurrentTingkat.filter((s) => s.kelas === kelas);
+    return semuaSiswaCurrentTingkat
+      .filter((s) => s.kelas === kelas)
+      .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
   }, [isGlobalSearchActive, searchSiswaGlobal, allStudentsAllLevels, semuaSiswaCurrentTingkat, kelas]);
 
   const toggleSiswa = (nis: string) => {
