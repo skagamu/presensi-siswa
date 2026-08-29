@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
 import { fetchGasApi, fetchGasApiGet } from "@/lib/api";
+import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
@@ -104,11 +105,32 @@ export default function DashboardPage() {
     await generateSuratTugasDocx(alert);
   };
 
-  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent) => {
+  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent<HTMLFormElement>) => {
     const idPeringatan = alert.idPeringatan;
     e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector(`input[type="file"]`) as HTMLInputElement | null;
+    const notesInput = form.querySelector(`textarea`) as HTMLTextAreaElement | null;
+    const notes = notesInput?.value || "Diselesaikan";
+
+    let fileBase64 = "";
+    let fileName = "";
+
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const file = fileInput.files[0];
+      const validation = validateFile(file);
+      if (!validation.valid) {
+        return toast.error(validation.error || "File tidak valid.");
+      }
+      try {
+        fileBase64 = await fileToBase64(file);
+        fileName = file.name;
+      } catch (err) {
+        return toast.error("Gagal membaca file.");
+      }
+    }
+
     setIsUploading(idPeringatan);
-    const notes = (document.getElementById(`notes-${idPeringatan}`) as HTMLTextAreaElement).value;
 
     try {
       const res = await fetchGasApi("resolveCase", { 
@@ -116,10 +138,10 @@ export default function DashboardPage() {
         nis: alert.nis,
         nama: alert.nama,
         kelas: alert.kelas,
-        catatan_konseling: notes || "Diselesaikan", 
+        catatan_konseling: notes, 
         ditangani_oleh: "Guru BK", 
-        fileName: "bukti.pdf", 
-        pdfBase64: "dummy" 
+        fileName: fileName || "bukti.pdf", 
+        fileBase64: fileBase64 || "dummy" 
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
@@ -237,7 +259,11 @@ export default function DashboardPage() {
                               <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                               <div className="space-y-4 py-4">
                                 <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2"><p>Tindakan yang disarankan: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>
-                                <div className="space-y-2 pt-2"><Label htmlFor="file">Upload File Bukti (.pdf)</Label><Input id="file" type="file" accept=".pdf" /></div>
+                                <div className="space-y-2 pt-2">
+  <Label htmlFor={`file-${alert.idPeringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
+  <Input id={`file-${alert.idPeringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+  <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
+</div>
                                 <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                               </div>
                               <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>

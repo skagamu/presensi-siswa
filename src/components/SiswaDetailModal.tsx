@@ -10,6 +10,7 @@ export interface LogPresensiItem {
   tanggal: string;
   status: string;
   adaSurat: boolean;
+  linkBukti?: string;
 }
 
 export interface KasusItem {
@@ -136,8 +137,30 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                             {log.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-gray-500">
-                          {log.adaSurat ? "Ada Surat Dokter / Bukti" : "-"}
+                        <TableCell className="text-gray-600">
+                          {log.adaSurat ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                              Ada Surat Dokter / Bukti
+                              {log.linkBukti && (
+                                <a
+                                  href={log.linkBukti}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline inline-flex items-center ml-1 text-[11px]"
+                                >
+                                  (Lihat Berkas)
+                                </a>
+                              )}
+                            </span>
+                          ) : log.status === "SAKIT" ? (
+                            <span className="text-amber-700/80">Tanpa Surat Dokter</span>
+                          ) : log.status === "IZIN" ? (
+                            <span className="text-blue-700/80">Izin Tertulis / Lisan</span>
+                          ) : log.status === "ALPHA" ? (
+                            <span className="text-red-600 font-medium">Tanpa Keterangan</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

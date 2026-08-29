@@ -22,6 +22,7 @@ interface RawLog {
   status: string;
   tanggal: string;
   adaSurat: boolean;
+  linkBukti?: string;
 }
 
 interface RawKasus {
@@ -101,6 +102,7 @@ export default function DataSiswaPage() {
                 tanggal: c[1]?.f || c[1]?.v || "",
                 status: String(c[5]?.v || "").toUpperCase(),
                 adaSurat: Boolean(c[6]?.v),
+                linkBukti: c[7]?.v ? String(c[7].v) : undefined,
               });
             }
           });

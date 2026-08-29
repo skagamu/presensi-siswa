@@ -304,15 +304,16 @@ const CaseController = {
   },
   resolve: function (body) {
     try {
-      const { id_peringatan, nis, nama, kelas, catatan_konseling, ditangani_oleh, pdfBase64, fileName } = body;
+      const { id_peringatan, nis, nama, kelas, catatan_konseling, ditangani_oleh, pdfBase64, fileBase64, fileName } = body;
       const timestamp = TimeHelper.getCurrentTimestamp();
-      const linkPdf = FileService.uploadPdf(pdfBase64, fileName);
+      const rawBase64 = fileBase64 || pdfBase64;
+      const linkDokumen = FileService.uploadFile(rawBase64, fileName, "BK_Penyelesaian_Kasus");
       SpreadsheetRepository.insertRow(CONFIG.SHEETS.PENYELESAIAN_KASUS, [
         `RES-${new Date().getTime()}`, id_peringatan, nis || "-", nama || "-", 
-        kelas || "-", linkPdf, catatan_konseling || "", ditangani_oleh || "Guru BK", timestamp
+        kelas || "-", linkDokumen, catatan_konseling || "", ditangani_oleh || "Guru BK", timestamp
       ]);
       SpreadsheetRepository.updateAlertStatus(id_peringatan, "SELESAI");
-      return ResponseHelper.success({ linkPdf }, "Kasus diselesaikan.");
+      return ResponseHelper.success({ linkDokumen }, "Kasus diselesaikan.");
     } catch (error) { return ResponseHelper.error(error.message); }
   }
 };
@@ -340,9 +341,41 @@ const AlertService = {
 };
 
 const FileService = {
+  getMimeType: function (fileName) {
+    const ext = (fileName || "").split(".").pop().toLowerCase();
+    const map = {
+      pdf: "application/pdf",
+      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      doc: "application/msword",
+      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      xls: "application/vnd.ms-excel",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png"
+    };
+    return map[ext] || "application/octet-stream";
+  },
+  getOrCreateFolder: function (folderName) {
+    const folders = DriveApp.getFoldersByName(folderName);
+    if (folders.hasNext()) return folders.next();
+    return DriveApp.createFolder(folderName);
+  },
+  uploadFile: function (base64String, fileName, folderName = "BK_Dokumen_Presensi") {
+    if (!base64String || !fileName || base64String === "dummy") return "-";
+    try {
+      const cleanBase64 = base64String.replace(/^data:.*?;base64,/, "");
+      const mimeType = this.getMimeType(fileName);
+      const blob = Utilities.newBlob(Utilities.base64Decode(cleanBase64), mimeType, fileName);
+      const targetFolder = this.getOrCreateFolder(folderName);
+      const file = targetFolder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      return file.getUrl();
+    } catch (error) {
+      return "Gagal upload: " + error.message;
+    }
+  },
   uploadPdf: function (base64String, fileName) {
-    if (!base64String || !fileName) return "File tidak dilampirkan";
-    try { return DriveApp.createFile(Utilities.newBlob(Utilities.base64Decode(base64String), 'application/pdf', fileName)).getUrl(); } catch (error) { return "Gagal memproses file base64."; }
+    return this.uploadFile(base64String, fileName, "BK_Dokumen_Resolusi");
   }
 };
 
@@ -384,6 +417,12 @@ const SpreadsheetRepository = {
       let isFound = false;
       const cleanStudentNis = String(student.nis).replace(/[^0-9]/g, '');
 
+      let linkBukti = "";
+      if (student.fileBase64 && student.fileName) {
+        linkBukti = FileService.uploadFile(student.fileBase64, student.fileName, "BK_Bukti_Izin");
+      }
+      const adaDokter = Boolean(student.ada_surat_dokter || linkBukti);
+
       for(let i = data.length - 1; i >= 1; i--) {
         let rowDateStr = "";
         if(data[i][1] instanceof Date) {
@@ -398,13 +437,19 @@ const SpreadsheetRepository = {
 
         if(rowDateStr.substring(0,10) === dateStr && cleanLogNis === cleanStudentNis) {
           sheet.getRange(i + 1, 6).setValue(student.status_presensi);
-          sheet.getRange(i + 1, 8).setValue(timestamp);
+          sheet.getRange(i + 1, 7).setValue(adaDokter);
+          if (linkBukti) {
+            sheet.getRange(i + 1, 8).setValue(linkBukti);
+            sheet.getRange(i + 1, 9).setValue(timestamp);
+          } else {
+            sheet.getRange(i + 1, 8).setValue(timestamp);
+          }
           isFound = true;
           break;
         }
       }
       if(!isFound) {
-        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, false, timestamp]);
+        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, adaDokter, linkBukti || timestamp, linkBukti ? timestamp : ""]);
       }
     });
 
