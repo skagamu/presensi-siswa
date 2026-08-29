@@ -38,6 +38,20 @@ const Router = {
 const DatabaseSetup = {
   init: function() {
     const ss = SpreadsheetApp.openById("1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY");
+    const logSheet = ss.getSheetByName(CONFIG.SHEETS.LOG_PRESENSI);
+    if (logSheet) {
+      logSheet.getRange(1, 1, 1, 9).setValues([["id_presensi", "tanggal", "nis", "nama", "kelas", "status_presensi", "ada_surat_dokter", "link_bukti_izin", "waktu_simpan"]]);
+      logSheet.getRange("H:H").setNumberFormat("@");
+      const data = logSheet.getDataRange().getValues();
+      for (let r = 1; r < data.length; r++) {
+        const val = data[r][7];
+        // If it was an old date/timestamp in col 8 instead of link, move to col 9
+        if (val instanceof Date || (typeof val === "string" && val.includes(":") && !val.startsWith("http"))) {
+          logSheet.getRange(r + 1, 8).setValue("");
+          logSheet.getRange(r + 1, 9).setValue(val);
+        }
+      }
+    }
     let sheetKasus = ss.getSheetByName(CONFIG.SHEETS.BANK_KASUS);
     if (!sheetKasus) {
       sheetKasus = ss.insertSheet(CONFIG.SHEETS.BANK_KASUS);
@@ -218,11 +232,12 @@ const AttendanceController = {
       const validDate = body.date || TimeHelper.getCurrentDate();
       const timestamp = TimeHelper.getCurrentTimestamp();
       const absentStudents = (body.attendances || []).filter(s => s.status_presensi !== "HADIR");
+      let uploadedLinks = [];
       if (absentStudents.length > 0) {
-        SpreadsheetRepository.upsertLogAbsence(validDate, absentStudents, timestamp);
+        uploadedLinks = SpreadsheetRepository.upsertLogAbsence(validDate, absentStudents, timestamp);
         AlertService.processAbsences(absentStudents, timestamp);
       }
-      return ResponseHelper.success(null, "Presensi berhasil disimpan.");
+      return ResponseHelper.success({ uploadedLinks }, "Presensi berhasil disimpan.");
     } catch (error) { return ResponseHelper.error(error.message); }
   },
 
@@ -413,6 +428,12 @@ const SpreadsheetRepository = {
     const data = sheet.getDataRange().getValues();
     let recordsToInsert = [];
     
+    // Ensure 9-column standard header: id_presensi | tanggal | nis | nama | kelas | status_presensi | ada_surat_dokter | link_bukti_izin | waktu_simpan
+    if (data.length > 0) {
+      const headers = ["id_presensi", "tanggal", "nis", "nama", "kelas", "status_presensi", "ada_surat_dokter", "link_bukti_izin", "waktu_simpan"];
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    }
+    
     absentStudents.forEach(student => {
       let isFound = false;
       const cleanStudentNis = String(student.nis).replace(/[^0-9]/g, '');
@@ -421,7 +442,7 @@ const SpreadsheetRepository = {
       if (student.fileBase64 && student.fileName) {
         linkBukti = FileService.uploadFile(student.fileBase64, student.fileName, "BK_Bukti_Izin");
       }
-      const adaDokter = Boolean(student.ada_surat_dokter || linkBukti);
+      const adaDokter = Boolean(student.ada_surat_dokter || (linkBukti && linkBukti.indexOf("http") !== -1));
 
       for(let i = data.length - 1; i >= 1; i--) {
         let rowDateStr = "";
@@ -438,20 +459,25 @@ const SpreadsheetRepository = {
         if(rowDateStr.substring(0,10) === dateStr && cleanLogNis === cleanStudentNis) {
           sheet.getRange(i + 1, 6).setValue(student.status_presensi);
           sheet.getRange(i + 1, 7).setValue(adaDokter);
-          if (linkBukti) {
-            sheet.getRange(i + 1, 8).setValue(linkBukti);
-          }
+          sheet.getRange(i + 1, 8).setValue(linkBukti || "");
           sheet.getRange(i + 1, 9).setValue(timestamp);
           isFound = true;
           break;
         }
       }
       if(!isFound) {
-        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, adaDokter, linkBukti, timestamp]);
+        recordsToInsert.push([`ATT-${new Date().getTime()}-${student.nis}`, dateStr, student.nis, student.nama, student.kelas, student.status_presensi, adaDokter, linkBukti ? String(linkBukti) : "", timestamp]);
       }
     });
 
     if(recordsToInsert.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, recordsToInsert.length, recordsToInsert[0].length).setValues(recordsToInsert);
+    return absentStudents.map(s => {
+      let debugLink = "";
+      if (s.fileBase64 && s.fileName) {
+        debugLink = FileService.uploadFile(s.fileBase64, s.fileName, "BK_Bukti_Izin");
+      }
+      return { nis: s.nis, debugLink: debugLink };
+    });
   },
   getAllLogs: function () { return this.getSheet(CONFIG.SHEETS.LOG_PRESENSI).getDataRange().getValues(); },
   getActiveAlerts: function () {
