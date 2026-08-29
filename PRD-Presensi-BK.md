@@ -3,7 +3,7 @@
 
 | Attributes | Details |
 | :--- | :--- |
-| **Document Version** | 2.0.0 (Single-User BK Dedicated) |
+| **Document Version** | 2.3.0 (Editable DOCX Surat Tugas & Single-User BK Dedicated) |
 | **Status** | Approved / Ready for Development |
 | **Target User** | Guru BK (Single Role / Pengguna Tunggal) |
 | **Core Module** | Top Priority Dashboard, Presensi Harian (Default HADIR), Home Visit PDF Generator, PDF Case Resolution, Arsip Kasus |
@@ -27,7 +27,7 @@
 ---
 
 ## 1. Executive Summary
-Aplikasi ini dirancang sebagai **tools khusus berbasis pengguna tunggal (Single Role: Guru BK)** untuk menangani ketidakhadiran siswa secara efisien, terstruktur, dan akuntabel. Dengan mengintegrasikan sistem presensi harian ber-preset `Default: HADIR`, perhitungan akumulasi otomatis ketidakhadiran ($\ge 3$ Hari), penempatan alert prioritas teratas di Dashboard BK, auto-generate PDF Surat Tugas Home Visit, serta kewajiban pengunggahan dokumen PDF hasil penanganan/sanksi untuk menutup alert, aplikasi ini menyelesaikan akar masalah keterlambatan intervensi siswa di sekolah.
+Aplikasi ini dirancang sebagai **tools khusus berbasis pengguna tunggal (Single Role: Guru BK)** untuk menangani ketidakhadiran siswa secara efisien, terstruktur, dan akuntabel. Dengan mengintegrasikan sistem presensi harian ber-preset `Default: HADIR`, perhitungan akumulasi otomatis ketidakhadiran ($\ge 3$ Hari), penempatan alert prioritas teratas di Dashboard BK, auto-generate dokumen Word (.docx) Surat Tugas Home Visit yang dapat diedit mandiri, kewajiban pengunggahan dokumen PDF hasil penanganan/sanksi untuk menutup alert, pengunggahan bukti surat izin, portal informasi orang tua (client-side), serta rekapan histori ketidakhadiran per siswa, aplikasi ini menyelesaikan akar masalah keterlambatan intervensi siswa di sekolah.
 
 ---
 
@@ -41,6 +41,7 @@ Menjadi alat kerja utama Guru BK yang fokus, proaktif, responsif, dan terorganis
 * **Efisiensi Penginputan**: Memangkas waktu pencatatan presensi harian hingga **80%** dengan penerapan status bawaan (*default*) **`HADIR`**.
 * **Deteksi Dini Tanpa Pencarian Manual**: Otomatisasi penandaan (*flagging*) siswa bermasalah tepat pada kelipatan 3 hari ketidakhadiran di baris teratas Dashboard BK.
 * **100% Validasi Berbasis Dokumen Legal**: Alert prioritas tidak dapat ditutup secara manual dan **wajib melampirkan berkas PDF** hasil Home Visit / Surat Keterangan / Sanksi yang tersimpan di Google Drive sekolah.
+* **Transparansi & Dokumentasi Lengkap**: Mendukung pengunggahan bukti surat izin, akses rekap presensi client-side untuk orang tua/wali siswa, serta profil rekapitulasi riwayat presensi individual per siswa.
 
 ---
 
@@ -50,7 +51,7 @@ Aplikasi ini menggunakan pendekatan **Single User (Murni Guru BK)**:
 
 | User Role | Deskripsi Pengguna | Hak Akses & Wewenang |
 | :--- | :--- | :--- |
-| **Guru BK** | Pengguna tunggal sistem (BK Sekolah) | - Input Presensi Harian (Default HADIR)<br>- Akses Top Priority Dashboard Alert<br>- Print/Download PDF Blanko Surat Tugas Home Visit<br>- Upload PDF Bukti Hasil Home Visit / Sanksi<br>- Akses Arsip & Riwayat Kasus BK |
+| **Guru BK** | Pengguna tunggal sistem (BK Sekolah) | - Input Presensi Harian (Default HADIR)<br>- Akses Top Priority Dashboard Alert<br>- Download Editable DOCX Blanko Surat Tugas Home Visit (Bisa diedit di Word/WPS/Docs)<br>- Upload PDF Bukti Hasil Home Visit / Sanksi<br>- Akses Arsip & Riwayat Kasus BK |
 
 ---
 
@@ -62,31 +63,44 @@ Aplikasi ini terdiri dari **3 Menu Utama** dan **6 Fitur Kunci**:
 ┌────────────────────────────────────────────────────────┐
 │  [1] DASHBOARD UTAMA BK                                │
 │      ├── Fitur #1: Top Priority Alert (Posisi Atas)    │
-│      ├── Fitur #2: Auto-Generate PDF Blanko Surat Tugas│
+│      ├── Fitur #2: Auto-Generate Editable DOCX Surat Tugas Home Visit│
 │      └── Fitur #3: Lock-Alert & Upload PDF Resolution   │
 ├────────────────────────────────────────────────────────┤
 │  [2] INPUT ABSENSI HARIAN                              │
 │      ├── Fitur #4: Form Presensi Presets (Default HADIR)│
-│      └── Fitur #5: Auto-Calculator & Logic Aggregator  │
+│      ├── Fitur #5: Upload Bukti Surat Izin / Sakit     │
+│      └── Fitur #6: Auto-Calculator & Logic Aggregator  │
 ├────────────────────────────────────────────────────────┤
-│  [3] RIWAYAT & REKAP KASUS                              │
-│      └── Fitur #6: Arsip Kasus & Viewer PDF Drive      │
+│  [3] RIWAYAT, REKAP KASUS & PROFIL SISWA               │
+│      ├── Fitur #7: Rekapan Riwayat Per Siswa (Individual)│
+│      └── Fitur #8: Arsip Kasus & Viewer PDF Drive      │
+├────────────────────────────────────────────────────────┤
+│  [4] PORTAL ORANG TUA / CLIENT-SIDE (Public/Parent)    │
+│      └── Fitur #9: Cek Presensi & Status Alert Siswa   │
 └────────────────────────────────────────────────────────┘
 ```
 
-### Rincian 6 Fitur Kunci:
+### Rincian Fitur Kunci (Diperbarui Berdasarkan Feedback Guru & Wali Kelas):
 1. **Fitur #1: Top Priority Alert (Posisi Paling Atas Dashboard)**  
    Menampilkan kartu siswa yang tidak masuk $\ge 3$ Hari pada posisi paling atas dashboard BK dengan penandaan badge Kumulatif 1 (3 Hari Pertama), Kumulatif 2 (3 Hari Kedua), dan Kumulatif 3 (3 Hari Ketiga).
-2. **Fitur #2: Auto-Generate PDF Blanko Surat Tugas Home Visit**  
+2. **Fitur #2: Auto-Generate Editable DOCX Surat Tugas Home Visit Home Visit**  
    Tombol cetak otomatis PDF Surat Tugas Kunjungan Rumah / Panggilan Ortu yang secara dinamis mengisi rincian tanggal dan keterangan alasan siswa tidak hadir.
 3. **Fitur #3: Lock-Alert & Upload PDF Penyelesaian Kasus**  
    Form upload file PDF (Surat Hasil Home Visit / Sanksi) yang menjadi **satu-satunya syarat** untuk menonaktifkan dan menghilangkan alert dari posisi teratas dashboard.
 4. **Fitur #4: Form Presensi Presets (`Default: HADIR`)**  
    Form absensi per kelas tempat Guru BK cukup memilih siswa yang `TIDAK HADIR` (`SAKIT`, `IZIN`, `ALPHA`).
-5. **Fitur #5: Auto-Calculator & Logic Aggregator**  
+5. **Fitur #5: Upload Bukti Surat Izin / Sakit** *(Feedback Guru)*  
+   Fasilitas unggah foto/scan lampiran bukti fisik saat memilih status `IZIN` atau `SAKIT` agar dokumen perizinan siswa terdokumentasi dan valid.
+6. **Fitur #6: Auto-Calculator & Logic Aggregator**  
    Mesin kalkulator di backend yang langsung mengagregasi total absen setelah tombol simpan diklik dan memicu alert jika menyentuh threshold.
-6. **Fitur #6: Arsip Kasus & Viewer PDF Drive**  
+7. **Fitur #7: Rekapan Individual Per Siswa** *(Feedback Guru & Wali Kelas)*  
+   Halaman/modal khusus yang menampilkan profil rekapitulasi riwayat presensi satu siswa secara mendalam (total Hadir, Sakit, Izin, Alpha, daftar tanggal absen, lampiran bukti izin, dan riwayat sanksi BK).
+8. **Fitur #8: Arsip Kasus & Viewer PDF Drive**  
    Menu rekapitulasi untuk membuka kembali riwayat kasus yang sudah `SELESAI` serta melihat dokumen PDF yang tersimpan di Google Drive.
+9. **Fitur #9: Pencarian Siswa di Bank Kasus BK** *(Pencarian Bank Kasus)*  
+   Fasilitas pencarian cepat (*search engine*) di dalam Bank Kasus BK berdasarkan NIS, Nama Siswa, Kelas, atau Level Kumulatif untuk mempermudah Guru BK melacak rekam jejak penanganan kasus masa lalu.
+10. **Fitur #10: Portal Informasi Orang Tua / Client-Side** *(Feedback Orang Tua)*  
+   Tampilan web/halaman publik terbatas (*Client-Side*) tanpa login rumit (cukup NISN/token) agar Orang Tua/Wali dapat mengecek status presensi, riwayat tidak masuk, dan status peringatan anak mereka secara transparan.
 
 ---
 
@@ -96,6 +110,10 @@ Aplikasi ini terdiri dari **3 Menu Utama** dan **6 Fitur Kunci**:
 * **US-02**: *Sebagai Guru BK, saya ingin sistem otomatis menampilkan siswa yang tidak masuk >= 3 hari di posisi paling atas dashboard agar saya langsung tahu siswa mana yang harus segera ditangani.*
 * **US-03**: *Sebagai Guru BK, saya ingin mencetak blanko Surat Tugas Home Visit PDF yang otomatis berisi rincian tanggal siswa absen agar saya memiliki surat resmi saat kunjungan rumah.*
 * **US-04**: *Sebagai Guru BK, saya ingin mengunggah file PDF bukti hasil home visit/sanksi untuk menghilangkan notifikasi prioritas dari dashboard.*
+* **US-05 (Feedback Guru)**: *Sebagai Guru BK/Piket, saya ingin dapat mengunggah foto/scan bukti surat izin siswa saat menginput presensi agar dokumentasi perizinan valid dan dapat dipertanggungjawabkan.*
+* **US-06 (Feedback Orang Tua)**: *Sebagai Orang Tua Siswa, saya ingin melihat halaman rekap presensi anak saya (client-side) secara online agar saya tahu perkembangan kehadiran anak saya di sekolah.*
+* **US-07 (Feedback Wali Kelas)**: *Sebagai Guru BK / Wali Kelas, saya ingin melihat rekapan presensi individual per siswa secara rinci untuk bahan evaluasi perkembangan perilaku siswa.*
+* **US-08 (Bank Kasus Search)**: *Sebagai Guru BK, saya ingin dapat mencari siswa di dalam Bank Kasus berdasarkan Nama/NIS/Kelas agar saya dapat menemukan riwayat kasus dan berkas PDF penanganan siswa dengan cepat.*
 
 ---
 
@@ -141,8 +159,8 @@ flowchart TD
     F3_2 --> F4_1[4.1 BK Klik Siswa Ber-Flag di Dashboard Top Priority]
     F4_1 --> F4_2{4.2 Pilihan Aksi BK}
     
-    F4_2 -- Cetak Surat --> F4_3A[4.3a System Auto-Generate PDF Blanko Surat Tugas Home Visit]
-    F4_3A --> F4_4A[4.4a Download / Print Surat Tugas - Detail Tanggal & Alasan Absen]
+    F4_2 -- Cetak Surat --> F4_3A[4.3a System Auto-Generate Editable DOCX Surat Tugas Home Visit Home Visit]
+    F4_3A --> F4_4A[4.4a Download File .docx Surat Tugas Home Visit (Siap Diedit / Dicetak)]
     F4_4A --> F3_2
     
     F4_2 -- Upload Penyelesaian --> F4_3B[4.3b Upload PDF Surat Keterangan / Hasil Home Visit / Sanksi]
@@ -169,7 +187,7 @@ File Spreadsheet: **`DB_PRESENSI_SISWA_BK`**
 
 #### B. Tab Log Presensi Harian (`LogPresensi`)
 > Header Baris 1 (Sel `A1` - `H1`):
-> `id_presensi` | `tanggal` | `nis` | `nama` | `kelas` | `status_presensi` | `ada_surat_dokter` | `waktu_simpan`
+> `id_presensi` | `tanggal` | `nis` | `nama` | `kelas` | `status_presensi` | `ada_surat_dokter` | `link_bukti_izin` | `waktu_simpan`
 
 #### C. Tab Pemicu Priority Dashboard (`PeringatanKasus`)
 > Header Baris 1 (Sel `A1` - `H1`):
@@ -243,5 +261,5 @@ Anda adalah seorang Senior Full-Stack Developer. Tolong kembangkan aplikasi web 
 1. Buat aplikasi dengan 3 Menu Utama: Dashboard BK (Top Priority Alert), Input Presensi Harian (Default HADIR), dan Riwayat Kasus.
 2. Gunakan Google Sheets sebagai database (Sheet: Siswa_X, Siswa_XI, Siswa_XII, LogPresensi, PeringatanKasus, PenyelesaianKasus, Users) dan Google Apps Script sebagai API.
 3. Implementasikan logika hitung akumulasi absen otomatis (>= 3 hari) untuk menaikkan alert siswa ke posisi teratas Dashboard BK.
-4. Sediakan fitur cetak PDF Surat Tugas Home Visit dan pastikan kartu alert di top dashboard HANYA BISA ditutup dengan mengunggah file PDF bukti penyelesaian.
+4. Sediakan fitur cetak Dokumen Editable .docx Surat Tugas Home Visit dan pastikan kartu alert di top dashboard HANYA BISA ditutup dengan mengunggah file PDF bukti penyelesaian.
 ```
