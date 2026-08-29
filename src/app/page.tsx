@@ -12,7 +12,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
 import { fetchGasApi, fetchGasApiGet } from "@/lib/api";
-import { generateSuratTugasDocx } from "@/lib/docxGenerator";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
@@ -98,6 +97,11 @@ export default function DashboardPage() {
 
   const getBadgeColor = (tingkat: number) => {
     switch (tingkat) { case 1: return "bg-yellow-50 text-yellow-800 border-yellow-200"; case 2: return "bg-orange-50 text-orange-800 border-orange-200"; case 3: return "bg-red-50 text-red-700 border-red-200"; case 4: return "bg-red-600 text-white border-red-700"; default: return ""; }
+  };
+
+  const handleDownloadSurat = async (alert: AlertData) => {
+    const { generateSuratTugasDocx } = await import("@/lib/docxGenerator");
+    await generateSuratTugasDocx(alert);
   };
 
   const handleUploadResolution = async (alert: AlertData, e: React.FormEvent) => {
@@ -219,7 +223,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:flex md:items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 w-full md:w-auto">
-                        <Button variant="outline" size="sm" onClick={() => generateSuratTugasDocx(alert)} className="h-9 md:h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs sm:text-sm font-semibold">
+                        <Button variant="outline" size="sm" onClick={() => handleDownloadSurat(alert)} className="h-9 md:h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs sm:text-sm font-semibold">
                           <FileDown className="w-3.5 h-3.5" /><span className="truncate">Surat (.docx)</span>
                         </Button>
                         <Dialog>

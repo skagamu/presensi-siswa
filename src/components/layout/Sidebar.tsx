@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Archive, LayoutDashboard, Users, CalendarDays, FileWarning, ListTodo, MoreHorizontal, LogOut } from "lucide-react";
+import { Archive, LayoutDashboard, Users, CalendarDays, FileWarning, ListTodo, MoreHorizontal, LogOut, UserCheck } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { useState } from "react";
 
@@ -14,6 +14,7 @@ export function Sidebar() {
   const groups = [
     { label: "Utama", links: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Data Siswa", href: "/siswa", icon: UserCheck },
       { name: "Presensi", href: "/presensi", icon: Users },
     ]},
     { label: "Kasus BK", links: [
@@ -26,15 +27,16 @@ export function Sidebar() {
       { name: "Riwayat", href: "/riwayat", icon: Archive },
     ]},
   ];
-  const navLinks = groups.flatMap((group) => group.links);
+
   const mobileLinks = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Siswa", href: "/siswa", icon: UserCheck },
     { name: "Presensi", href: "/presensi", icon: Users },
     { name: "Alert", href: "/semua-alert", icon: ListTodo },
-    { name: "Rekap", href: "/rekap", icon: CalendarDays },
     { name: "Lainnya", href: "#", icon: MoreHorizontal },
   ];
   const moreLinks = [
+    { name: "Rekap Presensi", href: "/rekap", icon: CalendarDays },
     { name: "Bank Kasus", href: "/bank-kasus", icon: FileWarning },
     { name: "Daftar Kasus", href: "/daftar-kasus", icon: ListTodo },
     { name: "Riwayat", href: "/riwayat", icon: Archive },
@@ -129,7 +131,7 @@ export function Sidebar() {
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 shadow-[0_-8px_24px_-18px_rgba(15,23,42,0.35)] backdrop-blur">
         <nav className="grid h-16 grid-cols-5 px-1">
           {mobileLinks.map((link) => {
-            const isActive = pathname === link.href || (link.name === "Lainnya" && ["/bank-kasus", "/daftar-kasus", "/riwayat"].includes(pathname));
+            const isActive = pathname === link.href || (link.name === "Lainnya" && ["/rekap", "/bank-kasus", "/daftar-kasus", "/riwayat"].includes(pathname));
             const Icon = link.icon;
             if (link.name === "Lainnya") {
               return (
