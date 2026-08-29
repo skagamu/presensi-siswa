@@ -118,6 +118,11 @@ export default function BankKasusInputPage() {
 
   // Data yang ditampilkan: JIKA search aktif -> cari di SELURUH siswa (X, XI, XII)
   // JIKA search kosong -> tampilkan siswa di kelas aktif
+    const selectedStudents = useMemo(() => {
+    const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
+    return pool.filter((s) => selectedNis.includes(s.nis));
+  }, [selectedNis, allStudentsAllLevels, semuaSiswaCurrentTingkat]);
+
   const isGlobalSearchActive = searchSiswaGlobal.trim().length > 0;
 
   const displayedSiswa = useMemo(() => {
@@ -229,6 +234,37 @@ export default function BankKasusInputPage() {
               </button>
             )}
           </div>
+          {/* PILL CHIPS SISWA TERPILIH */}
+          {selectedStudents.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[11px] font-semibold text-gray-400 mr-1">Terpilih ({selectedStudents.length}):</span>
+              {selectedStudents.map((s) => (
+                <span
+                  key={s.nis}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-950 border border-orange-200 shadow-sm"
+                >
+                  <span className="truncate max-w-[140px] sm:max-w-[200px]">{s.nama}</span>
+                  <span className="text-[10px] text-orange-700 font-bold bg-white/70 px-1 rounded">{s.kelas}</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleSiswa(s.nis)}
+                    className="text-orange-700 hover:text-orange-950 p-0.5"
+                    aria-label={`Hapus ${s.nama}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={() => setSelectedNis([])}
+                className="text-[11px] font-semibold text-red-600 hover:text-red-700 hover:underline ml-1"
+              >
+                Reset Pilihan
+              </button>
+            </div>
+          )}
+
 
           {/* KONDISIONAL: JIKA TIDAK SEDANG GLOBAL SEARCH -> TAMPILKAN PILIH TINGKAT & TABS KELAS */}
           {!isGlobalSearchActive ? (
