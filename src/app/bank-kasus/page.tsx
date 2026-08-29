@@ -216,7 +216,7 @@ export default function BankKasusInputPage() {
             </div>
           </div>
 
-          {/* GLOBAL SEARCH BAR LINTAS TINGKAT & KELAS */}
+                    {/* GLOBAL SEARCH BAR LINTAS TINGKAT & KELAS */}
           <div className="relative w-full pt-1">
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
@@ -234,6 +234,7 @@ export default function BankKasusInputPage() {
               </button>
             )}
           </div>
+
           {/* PILL CHIPS SISWA TERPILIH */}
           {selectedStudents.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -265,6 +266,26 @@ export default function BankKasusInputPage() {
             </div>
           )}
 
+          {/* ACTION & SUMMARY ROW (DI BAWAH PILL CHIPS SISWA TERPILIH) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-orange-50/70 border border-orange-200 rounded-lg shadow-sm">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-gray-600">Total terpilih:</span>
+              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full font-bold bg-orange-200 text-orange-950 text-xs">
+                {selectedNis.length} siswa
+              </span>
+              {selectedNis.length === 0 && (
+                <span className="text-[11px] text-gray-400 italic">(Pilih siswa dari daftar di bawah)</span>
+              )}
+            </div>
+
+            <Button
+              onClick={handleSimpan}
+              disabled={isSaving || isFetchingSiswa || selectedNis.length === 0}
+              className="font-bold bg-orange-600 hover:bg-orange-700 text-white h-9 px-5 text-xs shadow-sm w-full sm:w-auto shrink-0"
+            >
+              {isSaving ? "Menyimpan..." : `Simpan Pelanggaran (${selectedNis.length})`}
+            </Button>
+          </div>
 
           {/* KONDISIONAL: JIKA TIDAK SEDANG GLOBAL SEARCH -> TAMPILKAN PILIH TINGKAT & TABS KELAS */}
           {!isGlobalSearchActive ? (
@@ -284,10 +305,7 @@ export default function BankKasusInputPage() {
                   </Select>
                 </div>
 
-                <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-                  <span className="text-xs font-medium text-gray-500">
-                    Terpilih: <strong className="text-orange-700 font-bold">{selectedNis.length}</strong> siswa
-                  </span>
+                <div className="flex items-center gap-2 w-full md:w-auto justify-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -297,7 +315,7 @@ export default function BankKasusInputPage() {
                     className="h-8 text-xs font-semibold border-gray-200"
                   >
                     <CheckSquare className="w-3.5 h-3.5 mr-1" />
-                    Pilih Semua di Kelas
+                    {displayedSiswa.length > 0 && displayedSiswa.every((s) => selectedNis.includes(s.nis)) ? "Batal Semua di Kelas" : "Pilih Semua di Kelas"}
                   </Button>
                 </div>
               </div>
@@ -333,9 +351,6 @@ export default function BankKasusInputPage() {
                 Hasil pencarian lintas semua tingkat ({displayedSiswa.length} siswa ditemukan)
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-gray-500">
-                  Terpilih: <strong className="text-orange-700">{selectedNis.length}</strong>
-                </span>
                 <Button
                   type="button"
                   variant="outline"
@@ -343,7 +358,7 @@ export default function BankKasusInputPage() {
                   onClick={toggleSemuaDisplayed}
                   className="h-7 text-xs font-semibold border-orange-200 text-orange-900 bg-orange-50/50"
                 >
-                  Pilih Semua Hasil
+                  {displayedSiswa.length > 0 && displayedSiswa.every((s) => selectedNis.includes(s.nis)) ? "Batal Semua Hasil" : "Pilih Semua Hasil"}
                 </Button>
               </div>
             </div>
@@ -351,7 +366,7 @@ export default function BankKasusInputPage() {
         </div>
 
         {/* MOBILE LIST VIEW */}
-        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[300px] pb-32">
+        <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[300px] pb-12">
           {isFetchingSiswa ? (
             <div className="h-48 grid place-items-center text-sm text-muted-foreground">Sedang memuat data siswa...</div>
           ) : displayedSiswa.length === 0 ? (
@@ -453,20 +468,7 @@ export default function BankKasusInputPage() {
           </Table>
         </div>
 
-        {/* BOTTOM ACTION BAR */}
-        <div className="border-t border-gray-200 p-4 bg-gray-50/90 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="text-xs text-gray-500">
-            Total siswa terpilih untuk dicatat pelanggaran:{" "}
-            <span className="font-bold text-orange-900">{selectedNis.length} siswa</span>
-          </div>
-          <Button
-            onClick={handleSimpan}
-            disabled={isSaving || isFetchingSiswa || selectedNis.length === 0}
-            className="w-full sm:w-auto font-bold bg-orange-600 hover:bg-orange-700 text-white h-10 px-6 shadow-sm"
-          >
-            {isSaving ? "Menyimpan ke Server..." : `Simpan Pelanggaran (${selectedNis.length})`}
-          </Button>
-        </div>
+
       </div>
     </div>
   );
