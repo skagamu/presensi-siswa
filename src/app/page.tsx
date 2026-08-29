@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { AlertTriangle, Printer, UploadCloud, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
+import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
 import { fetchGasApi, fetchGasApiGet } from "@/lib/api";
+import { generateSuratTugasDocx } from "@/lib/docxGenerator";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
