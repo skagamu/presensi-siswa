@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { fetchGasApi } from "@/lib/api";
+import { login as gasLogin } from "@/lib/api";
 import { toast } from "sonner";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
 import Image from "next/image";
@@ -20,10 +20,11 @@ export default function LoginPage() {
 
     setIsLoading(true);
     try {
-      const res = await fetchGasApi("login", { username: username.trim().toLowerCase(), password });
-      
+      const res = await gasLogin(username.trim().toLowerCase(), password);
+
       if (res.status === "success") {
-        const { token, user } = res.data;
+        const data = res.data as any;
+        const { token, user } = data;
         toast.success(`Selamat datang, ${user.nama}!`);
         login(token, user);
         setTimeout(() => { window.location.href = "/presensi-siswa/"; }, 300);

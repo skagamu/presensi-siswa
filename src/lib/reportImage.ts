@@ -16,6 +16,7 @@ export interface ReportItem {
 }
 
 export interface DayInfo {
+  dateObj?: Date; // optional Date instance for rendering
   dayIndex: number; // e.g. 24
   dayName: string; // e.g. "Senin"
   dateShort: string; // e.g. "24/08"
@@ -55,8 +56,8 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
   let colWidths: number[] = [];
 
   if (config.mode === "HARIAN") {
-    // NO(45), KELAS(80), NIS(75), NAMA(290), TANGGAL(85), Sakit(60), Izin(60), Alpa(60), Total(60)
-    colWidths = [45, 80, 75, 290, 85, 60, 60, 60, 60];
+    // NO(45), KELAS(80), NIS(75), NAMA(290), TANGGAL(120)
+    colWidths = [45, 80, 75, 290, 120];
   } else if (config.mode === "MINGGUAN") {
     // NO(45), KELAS(80), NIS(75), NAMA(270), 5 DAYS (55 each = 275), Sakit(55), Izin(55), Alpa(55), Total(55)
     colWidths = [45, 80, 75, 270, 55, 55, 55, 55, 55, 55, 55, 55, 55];
@@ -133,9 +134,7 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     const title = `PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
     const wTitle = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3];
     drawCell(startX, currentY, wTitle, headerRowHeight, "#bbf7d0", title, "center", '15px "Segoe UI", Arial, sans-serif', "#064e3b", true);
-    drawCell(startX + wTitle, currentY, colWidths[4], headerRowHeight, "#f8fafc", `TANGGAL ${config.tanggalSingkat || ""}`, "center", '10px "Segoe UI", Arial, sans-serif', "#334155", true);
-    const wKet = colWidths[5] + colWidths[6] + colWidths[7] + colWidths[8];
-    drawCell(startX + wTitle + colWidths[4], currentY, wKet, headerRowHeight, "#f1f5f9", "JUMLAH KETIDAKHADIRAN", "center", '11px "Segoe UI", Arial, sans-serif', "#1e293b", true);
+    drawCell(startX + wTitle, currentY, colWidths[4], headerRowHeight, "#f8fafc", `TANGGAL ${config.tanggalSingkat || ""}`, "center", '11px "Segoe UI", Arial, sans-serif', "#334155", true);
 
     currentY += headerRowHeight;
 
@@ -151,14 +150,6 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     colX += colWidths[3];
     drawCell(colX, currentY, colWidths[4], subHeaderHeight, "#f8fafc", config.namaHari || "", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
     drawCell(colX, currentY + subHeaderHeight, colWidths[4], subHeaderHeight, "#f8fafc", config.tanggalSingkat || "", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
-    colX += colWidths[4];
-    drawCell(colX, currentY, colWidths[5], subHeaderHeight * 2, "#fef08a", "Sakit", "center", '12px "Segoe UI", Arial, sans-serif', "#854d0e", true);
-    colX += colWidths[5];
-    drawCell(colX, currentY, colWidths[6], subHeaderHeight * 2, "#67e8f9", "Izin", "center", '12px "Segoe UI", Arial, sans-serif', "#155e75", true);
-    colX += colWidths[6];
-    drawCell(colX, currentY, colWidths[7], subHeaderHeight * 2, "#ef4444", "Alpa", "center", '12px "Segoe UI", Arial, sans-serif', "#ffffff", true);
-    colX += colWidths[7];
-    drawCell(colX, currentY, colWidths[8], subHeaderHeight * 2, "#e2e8f0", "Total", "center", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
 
     currentY += subHeaderHeight * 2;
 
@@ -183,21 +174,14 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
       if (st === "S") { statBg = "#fef08a"; statColor = "#854d0e"; }
       else if (st === "I") { statBg = "#67e8f9"; statColor = "#155e75"; }
       else if (st === "A") { statBg = "#ef4444"; statColor = "#ffffff"; }
-      drawCell(x, currentY, colWidths[4], rowHeight, statBg, st, "center", '12px "Segoe UI", Arial, sans-serif', statColor, true);
-      x += colWidths[4];
-
-      const sBg = row.sakit > 0 ? "#fef08a" : defaultBg;
-      drawCell(x, currentY, colWidths[5], rowHeight, sBg, row.sakit, "center", '12px "Segoe UI", Arial, sans-serif', "#000000", row.sakit > 0);
-      x += colWidths[5];
-      const iBg = row.izin > 0 ? "#67e8f9" : defaultBg;
-      drawCell(x, currentY, colWidths[6], rowHeight, iBg, row.izin, "center", '12px "Segoe UI", Arial, sans-serif', "#000000", row.izin > 0);
-      x += colWidths[6];
-      const aBg = row.alpa > 0 ? "#ef4444" : defaultBg;
-      const aColor = row.alpa > 0 ? "#ffffff" : "#000000";
-      drawCell(x, currentY, colWidths[7], rowHeight, aBg, row.alpa, "center", '12px "Segoe UI", Arial, sans-serif', aColor, row.alpa > 0);
-      x += colWidths[7];
-
-      drawCell(x, currentY, colWidths[8], rowHeight, "#f8fafc", row.total, "center", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+      
+      let fullStatus = st;
+      if (st === "S") fullStatus = "Sakit";
+      if (st === "I") fullStatus = "Izin";
+      if (st === "A") fullStatus = "Alpa";
+      
+      drawCell(x, currentY, colWidths[4], rowHeight, statBg, fullStatus, "center", '12px "Segoe UI", Arial, sans-serif', statColor, true);
+      
       currentY += rowHeight;
     });
 
@@ -205,12 +189,10 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, colWidths[4], footerHeight, "#fed7aa", config.totalTidakHadir, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
-    drawCell(startX + wTitle + colWidths[4], currentY, wKet, footerHeight, "#f8fafc", "", "center");
 
     currentY += footerHeight;
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "PROSENTASE KETIDAKHADIRAN", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, colWidths[4], footerHeight, "#fed7aa", percentage, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
-    drawCell(startX + wTitle + colWidths[4], currentY, wKet, footerHeight, "#f8fafc", "", "center");
   }
 
   // ==========================================

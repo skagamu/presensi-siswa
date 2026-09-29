@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Paperclip, FileCheck, X } from "lucide-react";
-import { fetchGasApi } from "@/lib/api";
+import { saveAttendance } from "@/lib/api";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 
 type StatusAbsen = "HADIR" | "SAKIT" | "IZIN" | "ALPHA";
@@ -124,12 +124,24 @@ export default function PresensiHarianPage() {
       };
     });
 
+    const BATCH_SIZE = 5;
+    let successCount = 0;
+    let hasError = false;
+
     try {
-      const res = await fetchGasApi("saveAttendance", { date: tanggal, attendances: dataKirim });
-      if(res.status === "success") {
+      for (let i = 0; i < dataKirim.length; i += BATCH_SIZE) {
+        const chunk = dataKirim.slice(i, i + BATCH_SIZE);
+        const res = await saveAttendance(tanggal, chunk);
+        if(res.status === "success") {
+          successCount += chunk.length;
+        } else {
+          hasError = true;
+          toast.error(`Error batch ${Math.floor(i/BATCH_SIZE) + 1}: ${res.message}`);
+        }
+      }
+
+      if(!hasError) {
         toast.success(`Presensi Kelas ${kelas} tanggal ${tanggal} disimpan!`);
-      } else {
-        toast.error("Error dari server: " + res.message);
       }
     } catch (error) {
       toast.error("Gagal mengirim presensi.");

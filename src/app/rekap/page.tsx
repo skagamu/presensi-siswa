@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { fetchGasApiGet } from "@/lib/api";
+import { getRekapBulanan } from "@/lib/api";
 import { Copy, Download, Image as ImageIcon } from "lucide-react";
 import {
   ReportConfig,
@@ -15,6 +15,7 @@ import {
   downloadReportImage,
   copyReportImageToClipboard,
 } from "@/lib/reportImage";
+import { downloadReportExcel } from "@/lib/reportExcel";
 
 interface RekapRow {
   nis: string;
@@ -99,10 +100,10 @@ export default function RekapitulasiMatrixPage() {
     const targetBulan = mode === "BULANAN" ? bulan : tanggalHarian.substring(0, 7);
 
     try {
-      const res = await fetchGasApiGet("getRekapBulanan", { month: targetBulan, tingkat: tingkat });
+      const res = await getRekapBulanan({ month: targetBulan, tingkat: tingkat as "X" | "XI" | "XII" | "SEMUA" });
       if (res.status === "success") {
-        setDataRekap(res.data);
-        if (res.data.length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
+        setDataRekap((res.data as unknown as RekapRow[]) || []);
+        if (((res.data as unknown as RekapRow[]) || []).length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
       } else {
         toast.error("Gagal menarik data.");
       }
@@ -389,6 +390,26 @@ export default function RekapitulasiMatrixPage() {
             >
               <Download className="w-3.5 h-3.5 mr-1.5 text-green-700" />
               Unduh Gambar ({mode})
+            </Button>
+            <Button
+              onClick={async () => {
+                if (dataRekap.length === 0) return toast.error("Data rekap masih kosong.");
+                try {
+                  const config = buildReportConfig();
+                  await downloadReportExcel(config);
+                  toast.success(`Laporan Excel (${mode}) berhasil diunduh.`);
+                } catch (e) {
+                  console.error(e);
+                  toast.error("Gagal men-generate Excel.");
+                }
+              }}
+              disabled={isFetching || isGeneratingImg || dataRekap.length === 0}
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs font-bold border-blue-300 text-blue-950 bg-blue-50/60 hover:bg-blue-100 shadow-sm"
+            >
+              <Download className="w-3.5 h-3.5 mr-1.5 text-blue-700" />
+              Unduh Excel ({mode})
             </Button>
           </div>
         </div>

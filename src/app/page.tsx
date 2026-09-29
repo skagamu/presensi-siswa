@@ -11,21 +11,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
-import { fetchGasApi, fetchGasApiGet } from "@/lib/api";
+import { getDashboardStats, getPeringatanKasus, resolveCase, PeringatanKasus } from "@/lib/api";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
-interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
 interface KasusTerakhir { idKasus: string; tanggal: string; nama: string; kelas: string; pelanggaran: string; }
-interface StatsData { 
-  tanggal: string; totalMurid: number; hadirHariIni: number; absenHariIni: number; persentaseKehadiran: number; 
+interface StatsData {
+  tanggal: string; totalMurid: number; hadirHariIni: number; absenHariIni: number; persentaseKehadiran: number;
   breakdown: { SAKIT: number, IZIN: number, ALPHA: number };
   chart: { weekly: { label: string, hadir: number, absen: number }[]; monthly: { label: string, hadir: number, absen: number }[]; }
 }
 
 export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<AlertData[] | null>(null);
+  const [alerts, setAlerts] = useState<PeringatanKasus[] | null>(null);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [kasusTerakhir, setKasusTerakhir] = useState<KasusTerakhir[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,32 +35,18 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      const resStats = await fetchGasApiGet("getDashboardStats");
-      if(resStats.status === "success") setStats(resStats.data);
+      // Stats via GAS API
+      const resStats = await getDashboardStats();
+      if (resStats.status === "success" && resStats.data) setStats(resStats.data as unknown as StatsData);
 
-      const gvizUrlAlert = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=PeringatanKasus&_v=${new Date().getTime()}`;
-      const resAlert = await fetch(gvizUrlAlert, { mode: 'cors', credentials: 'omit' });
-      const textAlert = await resAlert.text();
-      const jsonMatchAlert = textAlert.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-      if (jsonMatchAlert && jsonMatchAlert[1]) {
-        const json = JSON.parse(jsonMatchAlert[1]);
-        if (json.status === "ok") {
-          const rows = json.table.rows;
-          let activeAlerts: AlertData[] = [];
-          rows.forEach((row: any) => {
-            const c = row.c;
-            if (c && c[0] && c[6] && c[6].v === "AKTIF") {
-              activeAlerts.push({
-                idPeringatan: c[0].v, nis: c[1] ? c[1].v.toString() : "", nama: c[2] ? c[2].v : "", kelas: c[3] ? c[3].v : "",
-                tingkatKumulatif: c[4] ? Number(c[4].v) : 0, totalHariAbsen: c[5] ? Number(c[5].v) : 0, status: c[6].v, waktuDibuat: c[7] ? c[7].f || c[7].v : ""
-              });
-            }
-          });
-          activeAlerts.sort((a, b) => b.tingkatKumulatif - a.tingkatKumulatif);
-          setAlerts(activeAlerts);
-        }
+      // Active alerts via GAS API
+      const resAlerts = await getPeringatanKasus({ status_peringatan: "AKTIF" });
+      if (resAlerts.status === "success" && resAlerts.data) {
+        const sorted = [...resAlerts.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif);
+        setAlerts(sorted);
       }
 
+      // Bank Kasus via gviz (no dedicated GAS endpoint)
       const gvizUrlKasus = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=BankKasus&_v=${new Date().getTime()}`;
       const resKasus = await fetch(gvizUrlKasus, { mode: 'cors', credentials: 'omit' });
       const textKasus = await resKasus.text();
@@ -70,13 +55,13 @@ export default function DashboardPage() {
         const json = JSON.parse(jsonMatchKasus[1]);
         if (json.status === "ok") {
           const rows = json.table.rows;
-          let listKasus: KasusTerakhir[] = [];
+          const listKasus: KasusTerakhir[] = [];
           rows.forEach((row: any) => {
             const c = row.c;
             if (c && c[0]) {
               let tgl = "";
-              if(c[1]?.f) tgl = c[1].f;
-              else if(c[1]?.v) tgl = String(c[1].v).replace("Date(", "").replace(")", ""); 
+              if (c[1]?.f) tgl = c[1].f;
+              else if (c[1]?.v) tgl = String(c[1].v).replace("Date(", "").replace(")", "");
               listKasus.push({ idKasus: c[0].v, tanggal: tgl, nama: c[3]?.v || "", kelas: c[4]?.v || "", pelanggaran: c[5]?.v || "" });
             }
           });
@@ -96,17 +81,20 @@ export default function DashboardPage() {
     switch (tingkat) { case 1: return "Teguran Lisan / SP 1"; case 2: return "Home Visit / Ortu"; case 3: return "Skorsing / Konferensi"; case 4: return "Sidang Akhir DO"; default: return ""; }
   };
 
-  const getBadgeColor = (tingkat: number) => {
-    switch (tingkat) { case 1: return "bg-yellow-50 text-yellow-800 border-yellow-200"; case 2: return "bg-orange-50 text-orange-800 border-orange-200"; case 3: return "bg-red-50 text-red-700 border-red-200"; case 4: return "bg-red-600 text-white border-red-700"; default: return ""; }
-  };
-
-  const handleDownloadSurat = async (alert: AlertData) => {
+  const handleDownloadSurat = async (alert: PeringatanKasus) => {
     const { generateSuratTugasDocx } = await import("@/lib/docxGenerator");
-    await generateSuratTugasDocx(alert);
+    await generateSuratTugasDocx({
+      idPeringatan: alert.id_peringatan,
+      nis: alert.nis,
+      nama: alert.nama,
+      kelas: alert.kelas,
+      tingkatKumulatif: alert.tingkat_kumulatif,
+      totalHariAbsen: alert.total_hari_absen,
+    });
   };
 
-  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent<HTMLFormElement>) => {
-    const idPeringatan = alert.idPeringatan;
+  const handleUploadResolution = async (alert: PeringatanKasus, e: React.FormEvent<HTMLFormElement>) => {
+    const idPeringatan = alert.id_peringatan;
     e.preventDefault();
     const form = e.currentTarget;
     const fileInput = form.querySelector(`input[type="file"]`) as HTMLInputElement | null;
@@ -133,23 +121,23 @@ export default function DashboardPage() {
     setIsUploading(idPeringatan);
 
     try {
-      const res = await fetchGasApi("resolveCase", { 
-        id_peringatan: alert.idPeringatan, 
+      const res = await resolveCase({
+        id_peringatan: alert.id_peringatan,
         nis: alert.nis,
         nama: alert.nama,
         kelas: alert.kelas,
-        catatan_konseling: notes, 
-        ditangani_oleh: "Guru BK", 
-        fileName: fileName || "bukti.pdf", 
-        fileBase64: fileBase64 || "dummy" 
+        catatan_konseling: notes,
+        ditangani_oleh: "Guru BK",
+        fileName: fileName || "bukti.pdf",
+        fileBase64: fileBase64 || "dummy",
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
-        if (alerts) setAlerts(alerts.filter(a => a.idPeringatan !== idPeringatan));
+        if (alerts) setAlerts(alerts.filter(a => a.id_peringatan !== idPeringatan));
       } else {
         toast.error("Gagal resolve: " + res.message);
       }
-    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); } 
+    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); }
     finally { setIsUploading(null); }
   };
 
@@ -166,9 +154,8 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* TOP WIDGET STATS - REFACTORED TO NATIVE DIVS */}
+      {/* TOP WIDGET STATS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-3">
-        
         <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-2 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Total Siswa</h3>
@@ -208,10 +195,10 @@ export default function DashboardPage() {
 
       {/* TWO COLUMNS LAYOUT */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 pt-2">
-        
+
         {/* KOLOM KIRI: PRIORITY ALERTS & CHART */}
         <div className="xl:col-span-8 space-y-5">
-          
+
           <div>
             <div className="flex justify-between items-end mb-2.5 md:mb-3">
                <h2 className="text-lg font-semibold tracking-tight text-gray-950">Priority Alerts Top 3</h2>
@@ -227,10 +214,9 @@ export default function DashboardPage() {
                 <div className="p-6 text-center bg-green-50 text-green-700 border border-green-200 rounded-md font-medium text-sm">Tidak ada Active Alert saat ini. Sekolah kondusif!</div>
               ) : (
                 alerts?.slice(0, 3).map((alert) => {
-                  const isCritical = alert.tingkatKumulatif >= 3;
+                  const isCritical = alert.tingkat_kumulatif >= 3;
                   return (
-                    // RIBBON ALERT (Murni HTML DIV Tanpa Komponen Card Shadcn)
-                    <div key={alert.idPeringatan} className={`flex flex-col md:flex-row md:items-center justify-between px-3 py-3 md:px-4 rounded-md border transition-all gap-3 md:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
+                    <div key={alert.id_peringatan} className={`flex flex-col md:flex-row md:items-center justify-between px-3 py-3 md:px-4 rounded-md border transition-all gap-3 md:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
                       <div className="flex items-center gap-3 flex-1">
                         <div className={`p-1.5 sm:p-2 rounded-md flex-shrink-0 ${isCritical ? 'bg-red-50 text-red-500' : 'bg-orange-50 text-orange-500'}`}>
                           <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -239,9 +225,9 @@ export default function DashboardPage() {
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                             <h3 className={`text-sm sm:text-base font-bold leading-none ${isCritical ? 'text-red-900' : 'text-gray-900'}`}>{alert.nama}</h3>
                             <span className="text-[10px] sm:text-[11px] font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 leading-none h-4 sm:h-5 flex items-center">{alert.kelas}</span>
-                            <span className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-md border leading-none h-4 sm:h-5 flex items-center ${isCritical ? 'text-red-600 bg-red-50 border-red-100' : 'text-orange-600 bg-orange-50 border-orange-100'}`}>{alert.totalHariAbsen} Hari Absen</span>
+                            <span className={`text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-md border leading-none h-4 sm:h-5 flex items-center ${isCritical ? 'text-red-600 bg-red-50 border-red-100' : 'text-orange-600 bg-orange-50 border-orange-100'}`}>{alert.total_hari_absen} Hari Absen</span>
                           </div>
-                          <p className={`text-[11px] sm:text-xs mt-1 font-medium ${isCritical ? 'text-red-700' : 'text-gray-500'}`}>Level {alert.tingkatKumulatif} — Rekomendasi: {getTindakanInfo(alert.tingkatKumulatif)}</p>
+                          <p className={`text-[11px] sm:text-xs mt-1 font-medium ${isCritical ? 'text-red-700' : 'text-gray-500'}`}>Level {alert.tingkat_kumulatif} — Rekomendasi: {getTindakanInfo(alert.tingkat_kumulatif)}</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 md:flex md:items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-gray-100 w-full md:w-auto">
@@ -258,15 +244,15 @@ export default function DashboardPage() {
                             <form onSubmit={(e) => handleUploadResolution(alert, e)}>
                               <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                               <div className="space-y-4 py-4">
-                                <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2"><p>Tindakan yang disarankan: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>
+                                <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2"><p>Tindakan yang disarankan: <strong>{getTindakanInfo(alert.tingkat_kumulatif)}</strong>.</p></div>
                                 <div className="space-y-2 pt-2">
-  <Label htmlFor={`file-${alert.idPeringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-  <Input id={`file-${alert.idPeringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
-  <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
-</div>
-                                <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
+                                  <Label htmlFor={`file-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
+                                  <Input id={`file-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                                  <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
+                                </div>
+                                <div className="space-y-2"><Label htmlFor={`notes-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                               </div>
-                              <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                              <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                             </form>
                           </DialogContent>
                         </Dialog>
@@ -279,7 +265,7 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            {/* BAR CHART REFACTORED TO NATIVE DIV */}
+            {/* BAR CHART */}
             <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
               <div className="p-4 sm:p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -290,7 +276,7 @@ export default function DashboardPage() {
                    <button onClick={() => setChartMode("monthly")} className={`flex-1 sm:px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${chartMode === "monthly" ? "bg-white text-primary shadow-sm" : "text-gray-500"}`}>Bulanan</button>
                 </div>
               </div>
-              
+
               <div className="p-4 sm:p-5">
                 <div className="h-[280px] w-full">
                   {isLoading || !stats ? (
@@ -317,19 +303,19 @@ export default function DashboardPage() {
 
         {/* KOLOM KANAN: PREVIEW BANK KASUS */}
         <div className="xl:col-span-4 space-y-5">
-          
+
           <div>
             <div className="flex justify-between items-end mb-3">
                <h2 className="text-lg font-semibold tracking-tight text-gray-950">5 Kasus Terakhir</h2>
                <Link href="/daftar-kasus" className="text-sm font-semibold text-primary hover:underline">Semua</Link>
             </div>
-            
+
             <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col">
                <div className="bg-orange-50 border-b border-orange-100 px-4 py-3 flex items-center gap-2">
                  <FileWarning className="w-4 h-4 text-orange-600"/>
                  <h3 className="font-bold text-orange-900 text-sm">Pelanggaran Disiplin</h3>
                </div>
-               
+
                <div className="flex flex-col flex-1">
                   {isLoading ? (
                     <div className="p-6 text-center text-xs text-gray-400">Memuat kasus...</div>
@@ -339,8 +325,8 @@ export default function DashboardPage() {
                         <div className="flex justify-between items-start mb-1">
                           <p className="font-semibold text-sm text-gray-900 leading-tight">{k.nama}</p>
                           <span className="text-[10px] text-gray-400 whitespace-nowrap ml-2">
-                            {k.tanggal.includes(",") 
-                              ? `${k.tanggal.split(",")[0]}-${parseInt(k.tanggal.split(",")[1])+1}-${k.tanggal.split(",")[2]}` 
+                            {k.tanggal.includes(",")
+                              ? `${k.tanggal.split(",")[0]}-${parseInt(k.tanggal.split(",")[1])+1}-${k.tanggal.split(",")[2]}`
                               : k.tanggal.substring(0, 10)}
                           </span>
                         </div>

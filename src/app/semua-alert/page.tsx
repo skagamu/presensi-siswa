@@ -10,43 +10,21 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight } from "lucide-react";
-import { fetchGasApi } from "@/lib/api";
+import { getPeringatanKasus, resolveCase, PeringatanKasus } from "@/lib/api";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 
-interface AlertData { idPeringatan: string; nis: string; nama: string; kelas: string; tingkatKumulatif: number; totalHariAbsen: number; status: string; waktuDibuat: string; }
-
 export default function SemuaAlertPage() {
-  const [alerts, setAlerts] = useState<AlertData[]>([]);
+  const [alerts, setAlerts] = useState<PeringatanKasus[]>([]);
   const [isFetching, setIsFetching] = useState(true);
   const [isUploading, setIsUploading] = useState<string | null>(null);
-
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
 
   const fetchAlerts = async () => {
     setIsFetching(true);
     try {
-      const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=PeringatanKasus&_v=${new Date().getTime()}`;
-      const res = await fetch(gvizUrl, { mode: 'cors', credentials: 'omit' });
-      const text = await res.text();
-      const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-      
-      if (jsonMatch && jsonMatch[1]) {
-        const json = JSON.parse(jsonMatch[1]);
-        const rows = json.table.rows;
-        let activeAlerts: AlertData[] = [];
-        
-        rows.forEach((row: any) => {
-          const c = row.c;
-          if (c && c[0] && c[6] && c[6].v === "AKTIF") {
-            activeAlerts.push({
-              idPeringatan: c[0].v, nis: c[1] ? c[1].v.toString() : "", nama: c[2] ? c[2].v : "", kelas: c[3] ? c[3].v : "",
-              tingkatKumulatif: c[4] ? Number(c[4].v) : 0, totalHariAbsen: c[5] ? Number(c[5].v) : 0, status: c[6].v, waktuDibuat: c[7] ? c[7].f || c[7].v : ""
-            });
-          }
-        });
-        
-        activeAlerts.sort((a, b) => b.tingkatKumulatif - a.tingkatKumulatif);
-        setAlerts(activeAlerts);
+      const res = await getPeringatanKasus({ status_peringatan: "AKTIF" });
+      if (res.status === "success" && res.data) {
+        const sorted = [...res.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif);
+        setAlerts(sorted);
       }
     } catch (err) {
       toast.error("Gagal menarik data antrean.");
@@ -57,13 +35,20 @@ export default function SemuaAlertPage() {
 
   useEffect(() => { fetchAlerts(); }, []);
 
-  const handleDownloadSurat = async (alert: AlertData) => {
+  const handleDownloadSurat = async (alert: PeringatanKasus) => {
     const { generateSuratTugasDocx } = await import("@/lib/docxGenerator");
-    await generateSuratTugasDocx(alert);
+    await generateSuratTugasDocx({
+      idPeringatan: alert.id_peringatan,
+      nis: alert.nis,
+      nama: alert.nama,
+      kelas: alert.kelas,
+      tingkatKumulatif: alert.tingkat_kumulatif,
+      totalHariAbsen: alert.total_hari_absen,
+    });
   };
 
-  const handleUploadResolution = async (alert: AlertData, e: React.FormEvent<HTMLFormElement>) => {
-    const idPeringatan = alert.idPeringatan;
+  const handleUploadResolution = async (alert: PeringatanKasus, e: React.FormEvent<HTMLFormElement>) => {
+    const idPeringatan = alert.id_peringatan;
     e.preventDefault();
     const form = e.currentTarget;
     const fileInput = form.querySelector(`input[type="file"]`) as HTMLInputElement | null;
@@ -90,21 +75,21 @@ export default function SemuaAlertPage() {
     setIsUploading(idPeringatan);
 
     try {
-      const res = await fetchGasApi("resolveCase", { 
-        id_peringatan: alert.idPeringatan, 
+      const res = await resolveCase({
+        id_peringatan: alert.id_peringatan,
         nis: alert.nis,
         nama: alert.nama,
         kelas: alert.kelas,
-        catatan_konseling: notes, 
-        ditangani_oleh: "Guru BK", 
-        fileName: fileName || "bukti.pdf", 
-        fileBase64: fileBase64 || "dummy" 
+        catatan_konseling: notes,
+        ditangani_oleh: "Guru BK",
+        fileName: fileName || "bukti.pdf",
+        fileBase64: fileBase64 || "dummy",
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
-        setAlerts(alerts.filter(a => a.idPeringatan !== idPeringatan));
+        setAlerts(alerts.filter(a => a.id_peringatan !== idPeringatan));
       } else { toast.error("Gagal resolve: " + res.message); }
-    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); } 
+    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); }
     finally { setIsUploading(null); }
   };
 
@@ -136,7 +121,7 @@ export default function SemuaAlertPage() {
           </Button>
         </div>
 
-        {/* CONTENT DIV */}
+        {/* MOBILE VIEW */}
         <div className="md:hidden flex flex-col divide-y divide-gray-100 min-h-[320px]">
           {isFetching ? (
             <div className="h-48 grid place-items-center text-sm text-muted-foreground">Mencari data ke database...</div>
@@ -144,19 +129,19 @@ export default function SemuaAlertPage() {
             <div className="h-48 grid place-items-center text-sm font-medium text-green-600">Antrean Peringatan Kosong. Semua selesai!</div>
           ) : (
             alerts.map((alert) => {
-              const isCritical = alert.tingkatKumulatif >= 3;
+              const isCritical = alert.tingkat_kumulatif >= 3;
               return (
-                <div key={alert.idPeringatan} className={`p-4 space-y-3 border-l-[4px] ${isCritical ? "border-l-red-500 bg-red-50/20" : "border-l-orange-400 bg-white"}`}>
+                <div key={alert.id_peringatan} className={`p-4 space-y-3 border-l-[4px] ${isCritical ? "border-l-red-500 bg-red-50/20" : "border-l-orange-400 bg-white"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-semibold text-gray-950 leading-snug">{alert.nama}</div>
                       <div className="mt-1 text-[11px] text-gray-500">{alert.kelas}</div>
                     </div>
-                    <Badge variant="outline" className={`shrink-0 whitespace-nowrap bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>Level {alert.tingkatKumulatif}</Badge>
+                    <Badge variant="outline" className={`shrink-0 whitespace-nowrap bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>Level {alert.tingkat_kumulatif}</Badge>
                   </div>
                   <div className="flex items-center justify-between gap-3">
-                    <span className={`inline-flex min-w-[72px] justify-center whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-bold ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>{alert.totalHariAbsen} Hari</span>
-                    <span className="text-[11px] text-gray-500 truncate">{getTindakanInfo(alert.tingkatKumulatif)}</span>
+                    <span className={`inline-flex min-w-[72px] justify-center whitespace-nowrap rounded-md border px-2 py-1 text-[11px] font-bold ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>{alert.total_hari_absen} Hari</span>
+                    <span className="text-[11px] text-gray-500 truncate">{getTindakanInfo(alert.tingkat_kumulatif)}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" onClick={() => handleDownloadSurat(alert)} className="h-9 rounded-md text-xs text-blue-700 border-blue-200 hover:bg-blue-50 font-semibold"><FileDown className="mr-1.5 h-3.5 w-3.5" />Surat (.docx)</Button>
@@ -168,15 +153,15 @@ export default function SemuaAlertPage() {
                         <form onSubmit={(e) => handleUploadResolution(alert, e)}>
                           <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                           <div className="space-y-4 py-4">
-                            <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border"><p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p></div>
+                            <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border"><p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkat_kumulatif)}</strong>.</p></div>
                             <div className="space-y-2 pt-2">
-    <Label htmlFor={`file-mobile-${alert.idPeringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-    <Input id={`file-mobile-${alert.idPeringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
-    <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
-  </div>
-                            <div className="space-y-2"><Label htmlFor={`notes-mobile-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-mobile-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
+                              <Label htmlFor={`file-m-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
+                              <Input id={`file-m-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                              <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
+                            </div>
+                            <div className="space-y-2"><Label htmlFor={`notes-m-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-m-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                           </div>
-                          <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                          <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                         </form>
                       </DialogContent>
                     </Dialog>
@@ -187,6 +172,7 @@ export default function SemuaAlertPage() {
           )}
         </div>
 
+        {/* DESKTOP TABLE */}
         <div className="hidden md:block flex-1 overflow-x-auto min-h-[400px]">
           <Table className="min-w-[760px] text-sm">
             <TableHeader className="bg-gray-50 sticky top-0 z-10">
@@ -205,31 +191,30 @@ export default function SemuaAlertPage() {
                 <TableRow><TableCell colSpan={5} className="h-48 text-center text-green-600 font-medium">Antrean Peringatan Kosong. Semua selesai!</TableCell></TableRow>
               ) : (
                 alerts.map((alert, idx) => {
-                  const isCritical = alert.tingkatKumulatif >= 3;
+                  const isCritical = alert.tingkat_kumulatif >= 3;
                   return (
-                    <TableRow key={alert.idPeringatan} className={isCritical ? "bg-red-50/20" : "hover:bg-gray-50/50"}>
+                    <TableRow key={alert.id_peringatan} className={isCritical ? "bg-red-50/20" : "hover:bg-gray-50/50"}>
                       <TableCell className="text-center text-muted-foreground font-medium border-r border-gray-200">{idx + 1}</TableCell>
                       <TableCell className="border-r border-gray-200">
-                         <div className="font-semibold text-gray-900">{alert.nama}</div>
-                         <div className="text-[11px] text-gray-500 mt-0.5">{alert.kelas}</div>
+                        <div className="font-semibold text-gray-900">{alert.nama}</div>
+                        <div className="text-[11px] text-gray-500 mt-0.5">{alert.kelas}</div>
                       </TableCell>
                       <TableCell className="text-center border-r border-gray-200 whitespace-nowrap">
                         <span className={`inline-flex min-w-[72px] justify-center whitespace-nowrap text-[11px] font-bold px-2 py-1 rounded-md border ${isCritical ? 'text-red-700 bg-red-50 border-red-200' : 'text-orange-700 bg-orange-50 border-orange-200'}`}>
-                          {alert.totalHariAbsen} Hari
+                          {alert.total_hari_absen} Hari
                         </span>
                       </TableCell>
                       <TableCell className="text-center border-r border-gray-200 whitespace-nowrap">
-                         <Badge variant="outline" className={`min-w-[70px] justify-center whitespace-nowrap font-semibold bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>
-                           Level {alert.tingkatKumulatif}
-                         </Badge>
+                        <Badge variant="outline" className={`min-w-[70px] justify-center whitespace-nowrap font-semibold bg-white ${isCritical ? 'border-red-300 text-red-700' : 'border-orange-300 text-orange-700'}`}>
+                          Level {alert.tingkat_kumulatif}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right pr-4">
                         <div className="flex items-center justify-end gap-2">
-                           <Button variant="outline" size="sm" onClick={() => handleDownloadSurat(alert)} className="h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs font-semibold">
-                             <FileDown className="w-3.5 h-3.5" /><span className="truncate">Unduh Surat (.docx)</span>
-                           </Button>
-
-                           <Dialog>
+                          <Button variant="outline" size="sm" onClick={() => handleDownloadSurat(alert)} className="h-8 px-3 gap-1.5 text-blue-700 hover:text-blue-800 hover:bg-blue-50 border-blue-200 rounded-md text-xs font-semibold">
+                            <FileDown className="w-3.5 h-3.5" /><span className="truncate">Unduh Surat (.docx)</span>
+                          </Button>
+                          <Dialog>
                             <DialogTrigger asChild>
                               <Button size="sm" className={`h-8 px-3 gap-1.5 font-semibold rounded-md text-xs ${isCritical ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-orange-600 hover:bg-orange-700 text-white'}`}>
                                 <span className="hidden sm:inline">Upload Bukti Tindakan</span>
@@ -242,17 +227,17 @@ export default function SemuaAlertPage() {
                                 <DialogHeader><DialogTitle>Selesaikan Kasus - {alert.nama}</DialogTitle></DialogHeader>
                                 <div className="space-y-4 py-4">
                                   <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2">
-                                    <p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkatKumulatif)}</strong>.</p>
+                                    <p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkat_kumulatif)}</strong>.</p>
                                     <Button variant="outline" size="sm" type="button" onClick={() => handleDownloadSurat(alert)} className="w-fit h-8 text-xs gap-2 text-blue-700 border-blue-200 hover:bg-blue-50 font-semibold"><FileDown className="w-3 h-3" /> Unduh Surat Tugas (.docx)</Button>
                                   </div>
                                   <div className="space-y-2 pt-2">
-    <Label htmlFor={`file-${alert.idPeringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-    <Input id={`file-${alert.idPeringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
-    <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
-  </div>
-                                  <div className="space-y-2"><Label htmlFor={`notes-${alert.idPeringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.idPeringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
+                                    <Label htmlFor={`file-d-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
+                                    <Input id={`file-d-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                                    <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
+                                  </div>
+                                  <div className="space-y-2"><Label htmlFor={`notes-d-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-d-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                                 </div>
-                                <DialogFooter><Button type="submit" disabled={isUploading === alert.idPeringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.idPeringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                                <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                               </form>
                             </DialogContent>
                           </Dialog>
