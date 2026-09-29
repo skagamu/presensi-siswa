@@ -160,19 +160,21 @@ export default function RekapitulasiMatrixPage() {
         }
         const res = await getRekapRentang({ start_date: start, end_date: end, tingkat: tingkat as "X" | "XI" | "XII" | "SEMUA" });
         if (res.status === "success") {
-          setDataRekap((res.data as unknown as RekapRow[]) || []);
-          if (((res.data as unknown as RekapRow[]) || []).length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
+          const list = Array.isArray(res.data) ? (res.data as unknown as RekapRow[]) : [];
+          setDataRekap(list);
+          if (list.length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
         } else {
-          toast.error("Gagal menarik data.");
+          toast.error(res.message || "Gagal menarik data dari server.");
         }
       } else {
         const targetBulan = mode === "BULANAN" ? bulan : tanggalHarian.substring(0, 7);
         const res = await getRekapBulanan({ month: targetBulan, tingkat: tingkat as "X" | "XI" | "XII" | "SEMUA" });
         if (res.status === "success") {
-          setDataRekap((res.data as unknown as RekapRow[]) || []);
-          if (((res.data as unknown as RekapRow[]) || []).length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
+          const list = Array.isArray(res.data) ? (res.data as unknown as RekapRow[]) : [];
+          setDataRekap(list);
+          if (list.length === 0) toast.info("Data siswa kosong untuk tingkat ini.");
         } else {
-          toast.error("Gagal menarik data.");
+          toast.error(res.message || "Gagal menarik data dari server.");
         }
       }
     } catch (err) {

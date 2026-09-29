@@ -276,15 +276,15 @@ const AttendanceController = {
       
       let students = [];
       if (tingkat === "SEMUA") {
-         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
-         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
-         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X) || [];
+         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI) || [];
+         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII) || [];
          students = [...x, ...xi, ...xii];
       } else {
-         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]);
+         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]) || [];
       }
       
-      const logs = SpreadsheetRepository.getAllLogs();
+      const logs = SpreadsheetRepository.getAllLogs() || [];
       let rekapResult = [];
 
       students.forEach(siswa => {
@@ -360,15 +360,15 @@ const AttendanceController = {
 
       let students = [];
       if (tingkat === "SEMUA") {
-         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
-         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
-         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X) || [];
+         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI) || [];
+         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII) || [];
          students = [...x, ...xi, ...xii];
       } else {
-         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]);
+         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]) || [];
       }
       
-      const logs = SpreadsheetRepository.getAllLogs();
+      const logs = SpreadsheetRepository.getAllLogs() || [];
       let rekapResult = [];
 
       students.forEach(siswa => {
