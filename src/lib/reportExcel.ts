@@ -261,34 +261,31 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     applyStyle(foot2.getCell(10), "FFF8FAFC", "FF000000", false, centerAlign);
 
   } else {
-    // BULANAN
+    // BULANAN (Sesuai PDF SMK Gajah Mungkur 1)
     const dim = config.daysInMonth || 31;
-    const cols = [
-      { width: 5 }, { width: 10 }, { width: 10 }, { width: 30 }
+    ws.columns = [
+      { width: 5 }, // NO
+      { width: 10 }, // KELAS
+      { width: 10 }, // NIS
+      { width: 35 }, // NAMA
+      { width: 10 }, // Sakit
+      { width: 10 }, // Izin
+      { width: 10 }, // Alpa
+      { width: 15 }, // Total Tidak Hadir
+      { width: 15 }, // PERSENTASE TIDAK HADIR
+      { width: 15 }  // PERSENTASE HADIR
     ];
-    for (let d = 1; d <= dim; d++) cols.push({ width: 3.5 });
-    cols.push({ width: 5 }, { width: 5 }, { width: 5 }, { width: 6 });
-    ws.columns = cols;
 
-    ws.mergeCells(currentRow, 1, currentRow, 4);
-    const titleCell = ws.getCell(currentRow, 1);
-    titleCell.value = `REKAPITULASI PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
+    ws.mergeCells(`A${currentRow}:J${currentRow}`);
+    const titleCell = ws.getCell(`A${currentRow}`);
+    titleCell.value = `SMK GAJAH MUNGKUR 1 WURYANTORO TAHUN AJARAN 2025/2026`;
     applyStyle(titleCell, "FFBBF7D0", "FF064E3B", true, centerAlign);
-
-    ws.mergeCells(currentRow, 5, currentRow, 4 + dim);
-    const dTitle = ws.getCell(currentRow, 5);
-    dTitle.value = `TANGGAL 1 S.D ${dim}`;
-    applyStyle(dTitle, "FFF8FAFC", "FF334155", true, centerAlign);
-
-    ws.mergeCells(currentRow, 5 + dim, currentRow, 8 + dim);
-    const wKet = ws.getCell(currentRow, 5 + dim);
-    wKet.value = "TOTAL";
-    applyStyle(wKet, "FFF1F5F9", "FF1E293B", true, centerAlign);
 
     ws.getRow(currentRow).height = 25;
     currentRow++;
 
-    const headers = ["NO", "KELAS", "NIS", "NAMA SISWA"];
+    // Header Tabel Atas
+    const headers = ["NO", "KELAS", "NIS", "NAMA"];
     headers.forEach((h, i) => {
       ws.mergeCells(currentRow, i + 1, currentRow + 1, i + 1);
       const c = ws.getCell(currentRow, i + 1);
@@ -297,32 +294,59 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       c.font.size = 10;
     });
 
-    for (let d = 1; d <= dim; d++) {
-      ws.mergeCells(currentRow, 4 + d, currentRow + 1, 4 + d);
-      const c = ws.getCell(currentRow, 4 + d);
-      c.value = d;
-      applyStyle(c, "FFF8FAFC", "FF000000", true, centerAlign);
-      c.font.size = 10;
-    }
+    // Alasan Tidak Hadir
+    ws.mergeCells(currentRow, 5, currentRow, 7);
+    const alasanCell = ws.getCell(currentRow, 5);
+    alasanCell.value = "Alasan Tidak Hadir";
+    applyStyle(alasanCell, "FFF8FAFC", "FF000000", true, centerAlign);
+    alasanCell.font.size = 10;
 
+    // Total Tidak Hadir
+    ws.mergeCells(currentRow, 8, currentRow + 1, 8);
+    const totalCell = ws.getCell(currentRow, 8);
+    totalCell.value = "Total Tidak Hadir";
+    applyStyle(totalCell, "FFF8FAFC", "FF000000", true, centerAlign);
+    totalCell.font.size = 10;
+    totalCell.alignment = { ...centerAlign, wrapText: true };
+
+    // Persentase
+    ws.mergeCells(currentRow, 9, currentRow, 10);
+    const persentaseCell = ws.getCell(currentRow, 9);
+    persentaseCell.value = "PERSENTASE";
+    applyStyle(persentaseCell, "FFF8FAFC", "FF000000", true, centerAlign);
+    persentaseCell.font.size = 10;
+
+    // Sub-Header (Baris 2)
     const ketHeaders = [
-      { label: "S", bg: "FFFEF08A", fc: "FF854D0E" },
-      { label: "I", bg: "FF67E8F9", fc: "FF155E75" },
-      { label: "A", bg: "FFEF4444", fc: "FFFFFFFF" },
-      { label: "Tot", bg: "FFE2E8F0", fc: "FF0F172A" }
+      { label: "Sakit", bg: "FFFEF08A", fc: "FF854D0E", col: 5 },
+      { label: "Izin", bg: "FF67E8F9", fc: "FF155E75", col: 6 },
+      { label: "Alpa", bg: "FFEF4444", fc: "FFFFFFFF", col: 7 },
     ];
 
-    ketHeaders.forEach((k, idx) => {
-      ws.mergeCells(currentRow, 5 + dim + idx, currentRow + 1, 5 + dim + idx);
-      const c = ws.getCell(currentRow, 5 + dim + idx);
+    ketHeaders.forEach((k) => {
+      const c = ws.getCell(currentRow + 1, k.col);
       c.value = k.label;
       applyStyle(c, k.bg, k.fc, true, centerAlign);
       c.font.size = 10;
     });
 
-    ws.getRow(currentRow).height = 16;
-    ws.getRow(currentRow + 1).height = 16;
+    const pTidakHadir = ws.getCell(currentRow + 1, 9);
+    pTidakHadir.value = "TIDAK HADIR";
+    applyStyle(pTidakHadir, "FFFFE4E6", "FFBE123C", true, centerAlign); // Merah pudar
+    pTidakHadir.font.size = 9;
+
+    const pHadir = ws.getCell(currentRow + 1, 10);
+    pHadir.value = "HADIR";
+    applyStyle(pHadir, "FFDCFCE7", "FF166534", true, centerAlign); // Hijau pudar
+    pHadir.font.size = 9;
+
+    ws.getRow(currentRow).height = 18;
+    ws.getRow(currentRow + 1).height = 18;
     currentRow += 2;
+
+    // Rows Data Siswa
+    let totalSiswaBermasalah = 0; // <90% hadir
+    const countPerKelas: Record<string, number> = {};
 
     config.items.forEach((row, i) => {
       const isEven = i % 2 === 0;
@@ -333,71 +357,90 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(1).value = row.no;
       applyStyle(r.getCell(1), defaultBg, "FF334155", false, centerAlign);
       r.getCell(1).font.size = 10;
+      
       r.getCell(2).value = row.kelas;
       applyStyle(r.getCell(2), defaultBg, "FF0F172A", true, centerAlign);
       r.getCell(2).font.size = 10;
+      
       r.getCell(3).value = row.nis;
       applyStyle(r.getCell(3), defaultBg, "FF475569", false, centerAlign);
       r.getCell(3).font.name = "Courier New";
       r.getCell(3).font.size = 10;
+      
       r.getCell(4).value = row.nama;
       applyStyle(r.getCell(4), defaultBg, "FF0F172A", true, leftAlign);
       r.getCell(4).font.size = 10;
 
-      const mStatuses = row.monthlyStatuses || [];
-      for (let d = 1; d <= dim; d++) {
-        const st = mStatuses[d - 1] || "";
-        let statBg = defaultBg;
-        let statColor = "FF000000";
-        if (st === "S") { statBg = "FFFEF08A"; statColor = "FF854D0E"; }
-        else if (st === "I") { statBg = "FF67E8F9"; statColor = "FF155E75"; }
-        else if (st === "A") { statBg = "FFEF4444"; statColor = "FFFFFFFF"; }
-        else if (st === "H") { statBg = "FFDCFCE7"; statColor = "FF166534"; }
-        
-        r.getCell(4 + d).value = st === "H" ? "" : st;
-        applyStyle(r.getCell(4 + d), statBg, statColor, true, centerAlign);
-        r.getCell(4 + d).font.size = 9;
+      r.getCell(5).value = row.sakit;
+      applyStyle(r.getCell(5), row.sakit > 0 ? "FFFEF08A" : defaultBg, "FF000000", row.sakit > 0, centerAlign);
+      r.getCell(5).font.size = 10;
+      
+      r.getCell(6).value = row.izin;
+      applyStyle(r.getCell(6), row.izin > 0 ? "FF67E8F9" : defaultBg, "FF000000", row.izin > 0, centerAlign);
+      r.getCell(6).font.size = 10;
+      
+      r.getCell(7).value = row.alpa;
+      applyStyle(r.getCell(7), row.alpa > 0 ? "FFEF4444" : defaultBg, row.alpa > 0 ? "FFFFFFFF" : "FF000000", row.alpa > 0, centerAlign);
+      r.getCell(7).font.size = 10;
+      
+      const totalAbsen = row.sakit + row.izin + row.alpa;
+      r.getCell(8).value = totalAbsen;
+      applyStyle(r.getCell(8), "FFF8FAFC", "FF0F172A", true, centerAlign);
+      r.getCell(8).font.size = 10;
+
+      // Kalkulasi persentase per anak
+      const persenTidakHadir = (totalAbsen / dim) * 100;
+      const persenHadir = 100 - persenTidakHadir;
+
+      if (persenHadir < 90) {
+        totalSiswaBermasalah++;
+        countPerKelas[row.kelas] = (countPerKelas[row.kelas] || 0) + 1;
       }
 
-      r.getCell(5 + dim).value = row.sakit;
-      applyStyle(r.getCell(5 + dim), row.sakit > 0 ? "FFFEF08A" : defaultBg, "FF000000", row.sakit > 0, centerAlign);
-      r.getCell(5 + dim).font.size = 10;
-      r.getCell(6 + dim).value = row.izin;
-      applyStyle(r.getCell(6 + dim), row.izin > 0 ? "FF67E8F9" : defaultBg, "FF000000", row.izin > 0, centerAlign);
-      r.getCell(6 + dim).font.size = 10;
-      r.getCell(7 + dim).value = row.alpa;
-      applyStyle(r.getCell(7 + dim), row.alpa > 0 ? "FFEF4444" : defaultBg, row.alpa > 0 ? "FFFFFFFF" : "FF000000", row.alpa > 0, centerAlign);
-      r.getCell(7 + dim).font.size = 10;
-      r.getCell(8 + dim).value = row.total;
-      applyStyle(r.getCell(8 + dim), "FFF8FAFC", "FF0F172A", true, centerAlign);
-      r.getCell(8 + dim).font.size = 10;
+      r.getCell(9).value = persenTidakHadir === 0 ? "-" : persenTidakHadir.toFixed(2) + "%";
+      applyStyle(r.getCell(9), defaultBg, "FFBE123C", false, centerAlign);
+      r.getCell(9).font.size = 10;
+
+      r.getCell(10).value = persenHadir.toFixed(2) + "%";
+      applyStyle(r.getCell(10), persenHadir < 90 ? "FFFEF08A" : defaultBg, persenHadir < 90 ? "FFB45309" : "FF166534", persenHadir < 90, centerAlign);
+      r.getCell(10).font.size = 10;
 
       currentRow++;
     });
 
-    const foot1 = ws.getRow(currentRow);
-    foot1.height = 20;
-    ws.mergeCells(currentRow, 1, currentRow, 4);
-    foot1.getCell(1).value = "TOTAL SISWA TIDAK HADIR";
-    applyStyle(foot1.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
-    ws.mergeCells(currentRow, 5, currentRow, 4 + dim);
-    foot1.getCell(5).value = config.totalTidakHadir;
-    applyStyle(foot1.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(currentRow, 5 + dim, currentRow, 8 + dim);
-    applyStyle(foot1.getCell(5 + dim), "FFF8FAFC", "FF000000", false, centerAlign);
+    // Spacer 1 baris
     currentRow++;
 
-    const foot2 = ws.getRow(currentRow);
-    foot2.height = 20;
-    ws.mergeCells(currentRow, 1, currentRow, 4);
-    foot2.getCell(1).value = "PROSENTASE KETIDAKHADIRAN";
-    applyStyle(foot2.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
-    ws.mergeCells(currentRow, 5, currentRow, 4 + dim);
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
-    foot2.getCell(5).value = percentage;
-    applyStyle(foot2.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(currentRow, 5 + dim, currentRow, 8 + dim);
-    applyStyle(foot2.getCell(5 + dim), "FFF8FAFC", "FF000000", false, centerAlign);
+    // Footer Ringkasan (Meniru format PDF)
+    ws.mergeCells(`A${currentRow}:C${currentRow}`);
+    const footTitle = ws.getCell(`A${currentRow}`);
+    footTitle.value = "Jumlah Siswa dengan Ketidakhadiran <90%";
+    applyStyle(footTitle, "FFFFFFFF", "FF000000", true, leftAlign);
+    footTitle.border = {}; // Hapus border
+
+    const footTotal = ws.getCell(`D${currentRow}`);
+    footTotal.value = totalSiswaBermasalah;
+    applyStyle(footTotal, "FFFFFFFF", "FF000000", true, leftAlign);
+    footTotal.border = {};
+    currentRow++;
+
+    // List kelas yang ada di tabel ini
+    const kelasUnik = Array.from(new Set(config.items.map(s => s.kelas))).sort();
+    
+    kelasUnik.forEach((kls) => {
+      ws.mergeCells(`A${currentRow}:C${currentRow}`);
+      const cKls = ws.getCell(`A${currentRow}`);
+      cKls.value = kls;
+      applyStyle(cKls, "FFFFFFFF", "FF000000", false, leftAlign);
+      cKls.border = {};
+
+      const cJml = ws.getCell(`D${currentRow}`);
+      cJml.value = countPerKelas[kls] || 0;
+      applyStyle(cJml, "FFFFFFFF", "FF000000", false, leftAlign);
+      cJml.border = {};
+
+      currentRow++;
+    });
   }
 
   const buffer = await wb.xlsx.writeBuffer();

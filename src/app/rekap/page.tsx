@@ -30,8 +30,8 @@ interface RekapRow {
 
 export default function RekapitulasiMatrixPage() {
   const [mode, setMode] = useState<"BULANAN" | "MINGGUAN" | "HARIAN">("MINGGUAN");
-  const [bulan, setBulan] = useState(new Date().toISOString().substring(0, 7));
-  const [tanggalHarian, setTanggalHarian] = useState(new Date().toISOString().substring(0, 10));
+  const [bulan, setBulan] = useState("");
+  const [tanggalHarian, setTanggalHarian] = useState("");
   const [tingkat, setTingkat] = useState("XI");
   const [kelasFilter, setKelasFilter] = useState("SEMUA");
   const [statusFilter, setStatusFilter] = useState("SEMUA");
@@ -39,24 +39,19 @@ export default function RekapitulasiMatrixPage() {
   const [dataRekap, setDataRekap] = useState<RekapRow[]>([]);
   const [isFetching, setIsFetching] = useState(false);
   const [isGeneratingImg, setIsGeneratingImg] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  const todayDate = new Date();
-  const currentMonthStr = todayDate.toISOString().substring(0, 7);
-  const currentDay = todayDate.getDate();
-
-  const daysInMonth = useMemo(() => {
-    if (!bulan) return 31;
-    const [year, month] = bulan.split("-");
-    return new Date(parseInt(year), parseInt(month), 0).getDate();
-  }, [bulan]);
-
-  const daysArray = useMemo(() => {
-    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  }, [daysInMonth]);
+  useEffect(() => {
+    setBulan(new Date().toISOString().substring(0, 7));
+    setTanggalHarian(new Date().toISOString().substring(0, 10));
+    setIsMounted(true);
+  }, []);
 
   // Compute 5-day week (Senin..Jumat) from tanggalHarian
   const weekInfo = useMemo(() => {
+    if (!tanggalHarian) return { days: [], periodeMinggu: "" };
     const d = new Date(`${tanggalHarian}T00:00:00`);
+
     const day = d.getDay(); // 0 = Sunday, 1 = Monday, ...
     const diffToMonday = (day === 0 ? -6 : 1) - day;
     const monday = new Date(d);
@@ -87,12 +82,23 @@ export default function RekapitulasiMatrixPage() {
     return { days, periodeMinggu };
   }, [tanggalHarian]);
 
+  const daysInMonth = useMemo(() => {
+    if (!bulan) return 31;
+    const [year, month] = bulan.split("-");
+    return new Date(parseInt(year), parseInt(month), 0).getDate();
+  }, [bulan]);
+
+  const daysArray = useMemo(() => {
+    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
+  }, [daysInMonth]);
+
   const daftarKelas = useMemo(() => {
     const classes = Array.from(new Set(dataRekap.map((s) => s.kelas))).filter(Boolean);
     return classes.sort();
   }, [dataRekap]);
 
   const fetchRekap = async () => {
+    if (!bulan || !tanggalHarian) return;
     setIsFetching(true);
     setDataRekap([]);
     setKelasFilter("SEMUA");
@@ -115,8 +121,8 @@ export default function RekapitulasiMatrixPage() {
   };
 
   useEffect(() => {
-    fetchRekap();
-  }, [tingkat, mode, bulan, tanggalHarian.substring(0, 7)]);
+    if (isMounted) fetchRekap();
+  }, [tingkat, mode, bulan, tanggalHarian.substring(0, 7), isMounted]);
 
   const getStatusColor = (status: string) => {
     if (!status) return "bg-transparent";
@@ -195,6 +201,7 @@ export default function RekapitulasiMatrixPage() {
   }, [absentDailyData]);
 
   const formattedTanggalHarian = useMemo(() => {
+    if (!tanggalHarian) return "";
     return new Intl.DateTimeFormat("id-ID", {
       weekday: "long",
       day: "numeric",
@@ -230,6 +237,7 @@ export default function RekapitulasiMatrixPage() {
 
   // Helper to build report config based on current active mode (HARIAN, MINGGUAN, BULANAN)
   const buildReportConfig = (): ReportConfig => {
+    if (!tanggalHarian) throw new Error("Tanggal belum diset");
     const dateObj = new Date(`${tanggalHarian}T00:00:00`);
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu"];
     const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -296,6 +304,8 @@ export default function RekapitulasiMatrixPage() {
       };
     });
 
+    const totalTidakHadirCount = items.reduce((sum, item) => sum + (item.sakit + item.izin + item.alpa), 0);
+
     return {
       mode,
       tingkat: tingkat === "SEMUA" ? "SEMUA TINGKAT" : tingkat,
@@ -305,7 +315,7 @@ export default function RekapitulasiMatrixPage() {
       periodeMinggu: weekInfo.periodeMinggu,
       weekDays: weekInfo.days,
       daysInMonth,
-      totalTidakHadir: items.length,
+      totalTidakHadir: totalTidakHadirCount,
       totalSiswa: dataRekap.length > 0 ? dataRekap.length : items.length,
       items,
     };
@@ -359,6 +369,8 @@ export default function RekapitulasiMatrixPage() {
       </div>
     );
   };
+
+  if (!isMounted) return null;
 
   return (
     <div className="w-full space-y-5 pb-24 md:pb-0">
