@@ -357,6 +357,10 @@ export default function RekapitulasiMatrixPage() {
 
   const renderCellContent = (statusDariDB: string, day: number) => {
     let isMasaDepan = false;
+    const todayDate = new Date();
+    const currentMonthStr = todayDate.toISOString().substring(0, 7);
+    const currentDay = todayDate.getDate();
+
     if (bulan > currentMonthStr) isMasaDepan = true;
     else if (bulan === currentMonthStr && day > currentDay) isMasaDepan = true;
 
