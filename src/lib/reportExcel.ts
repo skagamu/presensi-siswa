@@ -260,6 +260,152 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     ws.mergeCells(`J${currentRow}:M${currentRow}`);
     applyStyle(foot2.getCell(10), "FFF8FAFC", "FF000000", false, centerAlign);
 
+  } else if (config.mode === "KUSTOM") {
+    const customDayList = config.customDays || [];
+    const nDays = customDayList.length;
+    // Cols: NO, KELAS, NIS, NAMA, N day cols, S, I, A, Tot
+    ws.columns = [
+      { width: 5 }, { width: 12 }, { width: 12 }, { width: 35 },
+      ...Array(nDays).fill({ width: 8 }),
+      { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 },
+    ];
+
+    // Title row
+    ws.mergeCells(currentRow, 1, currentRow, 4);
+    const titleCell = ws.getCell(currentRow, 1);
+    titleCell.value = `PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
+    applyStyle(titleCell, "FFBBF7D0", "FF064E3B", true, centerAlign);
+
+    // Merge period over day columns
+    const dayStartCol = 5;
+    const dayEndCol = 4 + nDays;
+    const ketStartCol = dayEndCol + 1;
+    const ketEndCol = dayEndCol + 4;
+
+    if (nDays > 0) {
+      ws.mergeCells(currentRow, dayStartCol, currentRow, dayEndCol);
+      const wPeriode = ws.getCell(currentRow, dayStartCol);
+      wPeriode.value = config.periodeMinggu || "PERIODE KUSTOM";
+      applyStyle(wPeriode, "FFF8FAFC", "FF334155", true, centerAlign);
+    }
+
+    ws.mergeCells(currentRow, ketStartCol, currentRow, ketEndCol);
+    const wKet = ws.getCell(currentRow, ketStartCol);
+    wKet.value = "JUMLAH KETIDAKHADIRAN";
+    applyStyle(wKet, "FFF1F5F9", "FF1E293B", true, centerAlign);
+
+    ws.getRow(currentRow).height = 25;
+    currentRow++;
+
+    // Header row 1 & 2
+    const headers = ["NO", "KELAS", "NIS", "NAMA"];
+    headers.forEach((h, i) => {
+      ws.mergeCells(currentRow, i + 1, currentRow + 1, i + 1);
+      const c = ws.getCell(currentRow, i + 1);
+      c.value = h;
+      applyStyle(c, "FFF8FAFC", "FF000000", true, centerAlign);
+    });
+
+    customDayList.forEach((wd, idx) => {
+      const colNum = dayStartCol + idx;
+      const c1h = ws.getCell(currentRow, colNum);
+      c1h.value = wd.dayName;
+      applyStyle(c1h, "FFF8FAFC", "FF000000", true, centerAlign);
+      c1h.font.size = 10;
+      const c2h = ws.getCell(currentRow + 1, colNum);
+      c2h.value = wd.dateShort;
+      applyStyle(c2h, "FFF8FAFC", "FF000000", true, centerAlign);
+      c2h.font.size = 10;
+    });
+
+    const ketHeaders = [
+      { label: "Sakit", bg: "FFFEF08A", fc: "FF854D0E" },
+      { label: "Izin", bg: "FF67E8F9", fc: "FF155E75" },
+      { label: "Alpa", bg: "FFEF4444", fc: "FFFFFFFF" },
+      { label: "Total", bg: "FFE2E8F0", fc: "FF0F172A" },
+    ];
+    ketHeaders.forEach((k, idx) => {
+      const colNum = ketStartCol + idx;
+      ws.mergeCells(currentRow, colNum, currentRow + 1, colNum);
+      const c = ws.getCell(currentRow, colNum);
+      c.value = k.label;
+      applyStyle(c, k.bg, k.fc, true, centerAlign);
+    });
+
+    ws.getRow(currentRow).height = 16;
+    ws.getRow(currentRow + 1).height = 16;
+    currentRow += 2;
+
+    // Data rows
+    config.items.forEach((row, i) => {
+      const isEven = i % 2 === 0;
+      const defaultBg = isEven ? "FFFFFFFF" : "FFFCFCFC";
+      const r = ws.getRow(currentRow);
+      r.height = 20;
+
+      r.getCell(1).value = row.no;
+      applyStyle(r.getCell(1), defaultBg, "FF334155", false, centerAlign);
+      r.getCell(2).value = row.kelas;
+      applyStyle(r.getCell(2), defaultBg, "FF0F172A", true, centerAlign);
+      r.getCell(3).value = row.nis;
+      applyStyle(r.getCell(3), defaultBg, "FF475569", false, centerAlign);
+      r.getCell(3).font.name = "Courier New";
+      r.getCell(4).value = row.nama;
+      applyStyle(r.getCell(4), defaultBg, "FF0F172A", true, leftAlign);
+
+      const statuses = row.weeklyStatuses || [];
+      statuses.forEach((st, idx) => {
+        let statBg = defaultBg;
+        let statColor = "FF000000";
+        if (st === "S") { statBg = "FFFEF08A"; statColor = "FF854D0E"; }
+        else if (st === "I") { statBg = "FF67E8F9"; statColor = "FF155E75"; }
+        else if (st === "A") { statBg = "FFEF4444"; statColor = "FFFFFFFF"; }
+        else if (st === "H") { statBg = "FFDCFCE7"; statColor = "FF166534"; }
+        r.getCell(dayStartCol + idx).value = st === "-" ? "" : st;
+        applyStyle(r.getCell(dayStartCol + idx), statBg, statColor, true, centerAlign);
+      });
+
+      r.getCell(ketStartCol).value = row.sakit;
+      applyStyle(r.getCell(ketStartCol), row.sakit > 0 ? "FFFEF08A" : defaultBg, "FF000000", row.sakit > 0, centerAlign);
+      r.getCell(ketStartCol + 1).value = row.izin;
+      applyStyle(r.getCell(ketStartCol + 1), row.izin > 0 ? "FF67E8F9" : defaultBg, "FF000000", row.izin > 0, centerAlign);
+      r.getCell(ketStartCol + 2).value = row.alpa;
+      applyStyle(r.getCell(ketStartCol + 2), row.alpa > 0 ? "FFEF4444" : defaultBg, row.alpa > 0 ? "FFFFFFFF" : "FF000000", row.alpa > 0, centerAlign);
+      r.getCell(ketStartCol + 3).value = row.total;
+      applyStyle(r.getCell(ketStartCol + 3), "FFF8FAFC", "FF0F172A", true, centerAlign);
+
+      currentRow++;
+    });
+
+    // Footer
+    const foot1 = ws.getRow(currentRow);
+    foot1.height = 20;
+    ws.mergeCells(currentRow, 1, currentRow, 4);
+    foot1.getCell(1).value = "TOTAL SISWA TIDAK HADIR";
+    applyStyle(foot1.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
+    if (nDays > 0) {
+      ws.mergeCells(currentRow, dayStartCol, currentRow, dayEndCol);
+    }
+    foot1.getCell(dayStartCol).value = config.totalTidakHadir;
+    applyStyle(foot1.getCell(dayStartCol), "FFFED7AA", "FF7C2D12", true, centerAlign);
+    ws.mergeCells(currentRow, ketStartCol, currentRow, ketEndCol);
+    applyStyle(foot1.getCell(ketStartCol), "FFF8FAFC", "FF000000", false, centerAlign);
+    currentRow++;
+
+    const foot2 = ws.getRow(currentRow);
+    foot2.height = 20;
+    ws.mergeCells(currentRow, 1, currentRow, 4);
+    foot2.getCell(1).value = "PROSENTASE KETIDAKHADIRAN";
+    applyStyle(foot2.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
+    if (nDays > 0) {
+      ws.mergeCells(currentRow, dayStartCol, currentRow, dayEndCol);
+    }
+    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    foot2.getCell(dayStartCol).value = percentage;
+    applyStyle(foot2.getCell(dayStartCol), "FFFED7AA", "FF7C2D12", true, centerAlign);
+    ws.mergeCells(currentRow, ketStartCol, currentRow, ketEndCol);
+    applyStyle(foot2.getCell(ketStartCol), "FFF8FAFC", "FF000000", false, centerAlign);
+
   } else {
     // BULANAN (Sesuai PDF SMK Gajah Mungkur 1)
     const dim = config.daysInMonth || 31;

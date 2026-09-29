@@ -24,7 +24,7 @@ export interface DayInfo {
 }
 
 export interface ReportConfig {
-  mode: "HARIAN" | "MINGGUAN" | "BULANAN";
+  mode: "HARIAN" | "MINGGUAN" | "BULANAN" | "KUSTOM";
   tingkat: string;
   bulanTahun: string; // e.g. "AGUSTUS 2026"
   // For Harian
@@ -32,9 +32,11 @@ export interface ReportConfig {
   tanggalSingkat?: string;
   // For Mingguan
   periodeMinggu?: string; // e.g. "PERIODE 24 AGUSTUS - 28 AGUSTUS"
-  weekDays?: DayInfo[]; // 5 days
+  weekDays?: DayInfo[]; // 5 days (MINGGUAN) or N days (KUSTOM)
   // For Bulanan
   daysInMonth?: number;
+  // For Kustom: ordered list of days in the range
+  customDays?: DayInfo[];
   // Stats
   totalTidakHadir: number;
   totalSiswa: number;
@@ -61,6 +63,11 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
   } else if (config.mode === "MINGGUAN") {
     // NO(45), KELAS(80), NIS(75), NAMA(270), 5 DAYS (55 each = 275), Sakit(55), Izin(55), Alpa(55), Total(55)
     colWidths = [45, 80, 75, 270, 55, 55, 55, 55, 55, 55, 55, 55, 55];
+  } else if (config.mode === "KUSTOM") {
+    // NO(45), KELAS(80), NIS(75), NAMA(270), N DAYS (55 each), Sakit(55), Izin(55), Alpa(55), Total(55)
+    const nDays = (config.customDays || []).length || 1;
+    const dayCols = Array(nDays).fill(55);
+    colWidths = [45, 80, 75, 270, ...dayCols, 55, 55, 55, 55];
   } else {
     // BULANAN: NO(35), KELAS(70), NIS(65), NAMA(220), 31 DAYS (24 each = 744), S(35), I(35), A(35), Tot(40)
     const dim = config.daysInMonth || 31;
@@ -304,7 +311,106 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
   }
 
   // ==========================================
-  // MODE 3: BULANAN (MATRIX 1..31)
+  // MODE 3: KUSTOM (N DAYS RANGE)
+  // ==========================================
+  else if (config.mode === "KUSTOM") {
+    const customDayList = config.customDays || [];
+    const nDays = customDayList.length;
+    const title = `PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
+    const wTitle = colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3];
+    drawCell(startX, currentY, wTitle, headerRowHeight, "#bbf7d0", title, "center", '15px "Segoe UI", Arial, sans-serif', "#064e3b", true);
+
+    const wWeek = colWidths.slice(4, 4 + nDays).reduce((a, b) => a + b, 0);
+    drawCell(startX + wTitle, currentY, wWeek, headerRowHeight, "#f8fafc", config.periodeMinggu || "PERIODE KUSTOM", "center", '11px "Segoe UI", Arial, sans-serif', "#334155", true);
+
+    const wKet = colWidths.slice(4 + nDays).reduce((a, b) => a + b, 0);
+    drawCell(startX + wTitle + wWeek, currentY, wKet, headerRowHeight, "#f1f5f9", "JUMLAH KETIDAKHADIRAN", "center", '11px "Segoe UI", Arial, sans-serif', "#1e293b", true);
+
+    currentY += headerRowHeight;
+
+    // Subheaders
+    let colX = startX;
+    drawCell(colX, currentY, colWidths[0], subHeaderHeight * 2, "#f8fafc", "NO", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
+    colX += colWidths[0];
+    drawCell(colX, currentY, colWidths[1], subHeaderHeight * 2, "#f8fafc", "KELAS", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
+    colX += colWidths[1];
+    drawCell(colX, currentY, colWidths[2], subHeaderHeight * 2, "#f8fafc", "NIS", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
+    colX += colWidths[2];
+    drawCell(colX, currentY, colWidths[3], subHeaderHeight * 2, "#f8fafc", "NAMA", "center", '11px "Segoe UI", Arial, sans-serif', "#000000", true);
+    colX += colWidths[3];
+
+    customDayList.forEach((wd, idx) => {
+      drawCell(colX, currentY, colWidths[4 + idx], subHeaderHeight, "#f8fafc", wd.dayName, "center", '10px "Segoe UI", Arial, sans-serif', "#000000", true);
+      drawCell(colX, currentY + subHeaderHeight, colWidths[4 + idx], subHeaderHeight, "#f8fafc", wd.dateShort, "center", '10px "Segoe UI", Arial, sans-serif', "#000000", true);
+      colX += colWidths[4 + idx];
+    });
+
+    const kIdx = 4 + nDays;
+    drawCell(colX, currentY, colWidths[kIdx], subHeaderHeight * 2, "#fef08a", "Sakit", "center", '12px "Segoe UI", Arial, sans-serif', "#854d0e", true);
+    colX += colWidths[kIdx];
+    drawCell(colX, currentY, colWidths[kIdx + 1], subHeaderHeight * 2, "#67e8f9", "Izin", "center", '12px "Segoe UI", Arial, sans-serif', "#155e75", true);
+    colX += colWidths[kIdx + 1];
+    drawCell(colX, currentY, colWidths[kIdx + 2], subHeaderHeight * 2, "#ef4444", "Alpa", "center", '12px "Segoe UI", Arial, sans-serif', "#ffffff", true);
+    colX += colWidths[kIdx + 2];
+    drawCell(colX, currentY, colWidths[kIdx + 3], subHeaderHeight * 2, "#e2e8f0", "Total", "center", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+
+    currentY += subHeaderHeight * 2;
+
+    // Rows
+    config.items.forEach((row, i) => {
+      let x = startX;
+      const isEven = i % 2 === 0;
+      const defaultBg = isEven ? "#ffffff" : "#fcfcfc";
+
+      drawCell(x, currentY, colWidths[0], rowHeight, defaultBg, row.no, "center", '12px "Segoe UI", Arial, sans-serif', "#334155");
+      x += colWidths[0];
+      drawCell(x, currentY, colWidths[1], rowHeight, defaultBg, row.kelas, "center", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+      x += colWidths[1];
+      drawCell(x, currentY, colWidths[2], rowHeight, defaultBg, row.nis, "center", '11px "Courier New", monospace', "#475569");
+      x += colWidths[2];
+      drawCell(x, currentY, colWidths[3], rowHeight, defaultBg, row.nama, "left", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+      x += colWidths[3];
+
+      const statuses = row.weeklyStatuses || [];
+      statuses.forEach((st, idx) => {
+        let statBg = defaultBg;
+        let statColor = "#000000";
+        if (st === "S") { statBg = "#fef08a"; statColor = "#854d0e"; }
+        else if (st === "I") { statBg = "#67e8f9"; statColor = "#155e75"; }
+        else if (st === "A") { statBg = "#ef4444"; statColor = "#ffffff"; }
+        else if (st === "H") { statBg = "#dcfce7"; statColor = "#166534"; }
+
+        drawCell(x, currentY, colWidths[4 + idx], rowHeight, statBg, st === "-" ? "" : st, "center", '11px "Segoe UI", Arial, sans-serif', statColor, true);
+        x += colWidths[4 + idx];
+      });
+
+      const sBg = row.sakit > 0 ? "#fef08a" : defaultBg;
+      drawCell(x, currentY, colWidths[kIdx], rowHeight, sBg, row.sakit, "center", '12px "Segoe UI", Arial, sans-serif', "#000000", row.sakit > 0);
+      x += colWidths[kIdx];
+      const iBg = row.izin > 0 ? "#67e8f9" : defaultBg;
+      drawCell(x, currentY, colWidths[kIdx + 1], rowHeight, iBg, row.izin, "center", '12px "Segoe UI", Arial, sans-serif', "#000000", row.izin > 0);
+      x += colWidths[kIdx + 1];
+      const aBg = row.alpa > 0 ? "#ef4444" : defaultBg;
+      const aColor = row.alpa > 0 ? "#ffffff" : "#000000";
+      drawCell(x, currentY, colWidths[kIdx + 2], rowHeight, aBg, row.alpa, "center", '12px "Segoe UI", Arial, sans-serif', aColor, row.alpa > 0);
+      x += colWidths[kIdx + 2];
+      drawCell(x, currentY, colWidths[kIdx + 3], rowHeight, "#f8fafc", row.total, "center", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+      currentY += rowHeight;
+    });
+
+    // Footer
+    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+    drawCell(startX + wTitle, currentY, wWeek, footerHeight, "#fed7aa", config.totalTidakHadir, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
+    drawCell(startX + wTitle + wWeek, currentY, wKet, footerHeight, "#f8fafc", "", "center");
+    currentY += footerHeight;
+    drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "PROSENTASE KETIDAKHADIRAN", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
+    drawCell(startX + wTitle, currentY, wWeek, footerHeight, "#fed7aa", percentage, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
+    drawCell(startX + wTitle + wWeek, currentY, wKet, footerHeight, "#f8fafc", "", "center");
+  }
+
+  // ==========================================
+  // MODE 4: BULANAN (MATRIX 1..31)
   // ==========================================
   else {
     const dim = config.daysInMonth || 31;

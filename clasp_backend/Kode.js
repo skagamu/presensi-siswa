@@ -31,6 +31,7 @@ const Router = {
       case "getLogPresensi": return AttendanceController.getLogs(queryParams);
       case "getPriorityAlerts": return CaseController.getAlerts();
       case "getRekapBulanan": return AttendanceController.getRekapMatrix(queryParams);
+      case "getRekapRentang": return AttendanceController.getRekapRentang(queryParams);
       case "getDashboardStats": return DashboardController.getStats(queryParams);
       case "setupDatabase": return DatabaseSetup.init();
       case "injectMassiveDummy": return MassiveInjector.run();
@@ -65,7 +66,7 @@ const DatabaseSetup = {
     if (!sheetUsers) {
       sheetUsers = ss.insertSheet(CONFIG.SHEETS.USERS);
       sheetUsers.appendRow(["user_id", "username", "password", "nama_lengkap", "role"]);
-      sheetUsers.appendRow([`USR-1`, "admin", "123456", "Guru BK Utama", "ADMIN"]);
+      sheetUsers.appendRow(["USR-1", "admin", "123456", "Guru BK Utama", "ADMIN"]);
     }
     return ResponseHelper.success(null, "Database setup selesai!");
   }
@@ -320,6 +321,89 @@ const AttendanceController = {
             const dateSaja = parseInt(logDateStr.split("-")[2], 10); 
             
             logsHarian[dateSaja] = stat;
+            if(stat === "SAKIT") sakit++; else if(stat === "IZIN") izin++; else if(stat === "ALPHA") alpha++;
+          }
+        }
+        
+        rekapResult.push({
+          nis: cleanSiswaNis, 
+          nama: siswa.nama,
+          kelas: siswa.kelas,
+          sakit, izin, alpha,
+          totalTidakHadir: sakit + izin + alpha,
+          dailyLogs: logsHarian
+        });
+      });
+      return ResponseHelper.success(rekapResult);
+    } catch(error) { return ResponseHelper.error(error.message); }
+  },
+  getRekapRentang: function(queryParams) {
+    try {
+      const startDateStr = queryParams.start_date; // "2026-09-01"
+      const endDateStr = queryParams.end_date;     // "2026-09-15"
+      const tingkat = queryParams.tingkat || "SEMUA"; 
+      const kelas = queryParams.kelas; 
+      if (!startDateStr || !endDateStr) throw new Error("start_date dan end_date diperlukan");
+
+      // ponytail: shared normalize helper inline; extract to TimeHelper if a third caller appears
+      const normDate = (raw) => {
+        let s = String(raw).trim();
+        if (s.includes("/")) { const p = s.split("/"); if (p.length === 3) s = `${p[2]}-${p[1]}-${p[0]}`; }
+        s = s.split("T")[0];
+        const p = s.split("-");
+        return p.length === 3 ? `${p[0].padStart(4, "0")}-${p[1].padStart(2, "0")}-${p[2].padStart(2, "0")}` : s;
+      };
+      const startStr = normDate(startDateStr);
+      const endStr = normDate(endDateStr);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startStr) || !/^\d{4}-\d{2}-\d{2}$/.test(endStr)) throw new Error("Format tanggal harus YYYY-MM-DD");
+      if (startStr > endStr) throw new Error("start_date tidak boleh setelah end_date");
+
+      let students = [];
+      if (tingkat === "SEMUA") {
+         const x = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_X);
+         const xi = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XI);
+         const xii = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS.SISWA_XII);
+         students = [...x, ...xi, ...xii];
+      } else {
+         students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS[`SISWA_${tingkat}`]);
+      }
+      
+      const logs = SpreadsheetRepository.getAllLogs();
+      let rekapResult = [];
+
+      students.forEach(siswa => {
+        if(kelas && siswa.kelas !== kelas && kelas !== "SEMUA") return;
+        
+        let logsHarian = {}; 
+        let sakit = 0, izin = 0, alpha = 0;
+        
+        const cleanSiswaNis = String(siswa.nis).replace(/[^0-9]/g, '');
+
+        for(let i=1; i < logs.length; i++) {
+          const logDateRaw = logs[i][1];
+          let logDateStr = "";
+          
+          if(logDateRaw instanceof Date) {
+            const yyyy = logDateRaw.getFullYear();
+            const mm = String(logDateRaw.getMonth() + 1).padStart(2, '0');
+            const dd = String(logDateRaw.getDate()).padStart(2, '0');
+            logDateStr = `${yyyy}-${mm}-${dd}`;
+          } else {
+            logDateStr = String(logDateRaw).trim();
+            if(logDateStr.includes("/")) {
+                let parts = logDateStr.split("/");
+                if(parts.length === 3 && parts[2].length === 4) logDateStr = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+            }
+            if(logDateStr.includes("T")) logDateStr = logDateStr.split("T")[0];
+            logDateStr = logDateStr.substring(0, 10);
+          }
+          
+          const cleanLogNis = String(logs[i][2]).replace(/[^0-9]/g, '');
+          const logDateStrNorm = normDate(logDateStr);
+
+          if (cleanLogNis === cleanSiswaNis && logDateStrNorm >= startStr && logDateStrNorm <= endStr) {
+            const stat = String(logs[i][5]).toUpperCase().trim();
+            logsHarian[logDateStrNorm] = stat; // YYYY-MM-DD
             if(stat === "SAKIT") sakit++; else if(stat === "IZIN") izin++; else if(stat === "ALPHA") alpha++;
           }
         }
