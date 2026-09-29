@@ -25,6 +25,10 @@ const Router = {
   handleGetRequest: function (action, queryParams) {
     switch (action) {
       case "getStudents": return StudentController.getListGet(queryParams);
+      case "getSiswa": return StudentController.getListGet(queryParams);
+      case "getPeringatanKasus": return CaseController.getList(queryParams);
+      case "getPenyelesaianKasus": return CaseController.getPenyelesaian(queryParams);
+      case "getLogPresensi": return AttendanceController.getLogs(queryParams);
       case "getPriorityAlerts": return CaseController.getAlerts();
       case "getRekapBulanan": return AttendanceController.getRekapMatrix(queryParams);
       case "getDashboardStats": return DashboardController.getStats(queryParams);
@@ -227,6 +231,28 @@ const StudentController = {
 };
 
 const AttendanceController = {
+  getLogs: function (queryParams) {
+    try {
+      const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.LOG_PRESENSI);
+      if (!sheet) return ResponseHelper.success([]);
+      const data = sheet.getDataRange().getValues();
+      const logs = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (queryParams.nis && String(row[1]).trim() !== queryParams.nis) continue;
+        logs.push({
+          tanggal: row[0],
+          nis: row[1],
+          nama: row[2],
+          kelas: row[3],
+          status_presensi: row[4],
+          surat_dokter: row[5],
+          waktu_input: row[6]
+        });
+      }
+      return ResponseHelper.success(logs);
+    } catch (error) { return ResponseHelper.error(error.message); }
+  },
   save: function (body) {
     try {
       const validDate = body.date || TimeHelper.getCurrentDate();
@@ -313,6 +339,54 @@ const AttendanceController = {
 };
 
 const CaseController = {
+  getPenyelesaian: function (queryParams) {
+    try {
+      const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.PENYELESAIAN_KASUS);
+      if (!sheet) return ResponseHelper.success([]);
+      const data = sheet.getDataRange().getValues();
+      const results = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (queryParams.nis && String(row[1]).trim() !== queryParams.nis) continue;
+        results.push({
+          id_penyelesaian: row[0],
+          nis: row[1],
+          nama: row[2],
+          kelas: row[3],
+          id_peringatan: row[4],
+          jenis_dokumen: row[5],
+          link_bukti: row[6],
+          waktu_selesai: row[7]
+        });
+      }
+      return ResponseHelper.success(results);
+    } catch (error) { return ResponseHelper.error(error.message); }
+  },
+  getList: function (queryParams) {
+    try {
+      const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.PERINGATAN_KASUS);
+      const data = sheet.getDataRange().getValues();
+      const alerts = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const nis = queryParams.nis ? queryParams.nis : null;
+        const statusFilter = queryParams.status_peringatan ? queryParams.status_peringatan : null;
+        if (nis && String(row[1]).trim() !== nis) continue;
+        if (statusFilter && row[6] !== statusFilter) continue;
+        alerts.push({
+          id_peringatan: row[0],
+          nis: row[1],
+          nama: row[2],
+          kelas: row[3],
+          tingkat_kumulatif: row[4],
+          total_hari_absen: row[5],
+          status_peringatan: row[6],
+          waktu_dibuat: row[7]
+        });
+      }
+      return ResponseHelper.success(alerts);
+    } catch (error) { return ResponseHelper.error(error.message); }
+  },
   getAlerts: function () {
     try { return ResponseHelper.success(SpreadsheetRepository.getActiveAlerts()); } 
     catch (error) { return ResponseHelper.error(error.message); }
