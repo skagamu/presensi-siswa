@@ -1,6 +1,6 @@
 // Google Apps Script Web App URL
 export const API_URL =
-  "https://script.google.com/macros/s/AKfycbzzv_HI3K4fBWRATe2689ItNE6zmFrAikaRA5yicMkOK1lHCIFej_wyPebFt5dumIhQ/exec";
+  "https://script.google.com/macros/s/AKfycbxnV2plOOQfhZHhfK--IOzmqaJCXpOpulVxzcwaF7HqE4cZAWJUc52q8yjYt-W3MBcI/exec";
 
 // ─── Response shape from GAS backend ────────────────────────────────────────
 export interface GasResponse<T = unknown> {
