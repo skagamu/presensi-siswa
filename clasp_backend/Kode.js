@@ -317,6 +317,9 @@ const AttendanceController = {
           const cleanLogNis = String(logs[i][2]).replace(/[^0-9]/g, '');
 
           if(cleanLogNis === cleanSiswaNis && logDateStr.startsWith(month)) {
+            const dayOfWeek = new Date(logDateStr).getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
             const stat = String(logs[i][5]).toUpperCase().trim();
             const dateSaja = parseInt(logDateStr.split("-")[2], 10); 
             
@@ -402,6 +405,9 @@ const AttendanceController = {
           const logDateStrNorm = normDate(logDateStr);
 
           if (cleanLogNis === cleanSiswaNis && logDateStrNorm >= startStr && logDateStrNorm <= endStr) {
+            const dayOfWeek = new Date(logDateStrNorm).getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
             const stat = String(logs[i][5]).toUpperCase().trim();
             logsHarian[logDateStrNorm] = stat; // YYYY-MM-DD
             if(stat === "SAKIT") sakit++; else if(stat === "IZIN") izin++; else if(stat === "ALPHA") alpha++;
