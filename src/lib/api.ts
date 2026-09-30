@@ -1,6 +1,6 @@
 // Google Apps Script Web App URL
 export const API_URL =
-  "https://script.google.com/macros/s/AKfycby3YLwSGO0VHXY-IIRkRVsnVTjMJb4AoPtYQEHCKLQfkKJ080-jpXrmkAPD8Xl4utfg/exec";
+  "https://script.google.com/macros/s/AKfycbzzv_HI3K4fBWRATe2689ItNE6zmFrAikaRA5yicMkOK1lHCIFej_wyPebFt5dumIhQ/exec";
 
 // ─── Response shape from GAS backend ────────────────────────────────────────
 export interface GasResponse<T = unknown> {
@@ -139,6 +139,13 @@ export const getRekapBulanan = (params?: {
   tingkat?: "X" | "XI" | "XII" | "SEMUA";
   kelas?: string;
 }) => gasGet<RekapBulananRow[]>("getRekapBulanan", dropEmpty(params));
+
+export const getRekapRentang = (params?: {
+  start_date: string; // yyyy-mm-dd
+  end_date: string;   // yyyy-mm-dd
+  tingkat?: "X" | "XI" | "XII" | "SEMUA";
+  kelas?: string;
+}) => gasGet<RekapBulananRow[]>("getRekapRentang", dropEmpty(params));
 
 // ─── POST helpers ────────────────────────────────────────────────────────────
 
