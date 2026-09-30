@@ -112,23 +112,33 @@ export default function RekapitulasiMatrixPage() {
     const iter = new Date(cur);
 
     for (let i = 0; i < maxDays; i++) {
-      const dayNum = iter.getDate();
-      const monthNum = iter.getMonth() + 1;
-      result.push({
-        dateObj: new Date(iter),
-        dayIndex: dayNum,
-        dayName: shortDayNames[iter.getDay()],
-        dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
-        dateFull: iter.toISOString().split("T")[0],
-      });
+      const dow = iter.getDay();
+      if (dow !== 0 && dow !== 6) {
+        const dayNum = iter.getDate();
+        const monthNum = iter.getMonth() + 1;
+        result.push({
+          dateObj: new Date(iter),
+          dayIndex: dayNum,
+          dayName: shortDayNames[dow],
+          dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
+          dateFull: iter.toISOString().split("T")[0],
+        });
+      }
       iter.setDate(iter.getDate() + 1);
     }
     return result;
   }, [startDate, endDate]);
 
   const daysArray = useMemo(() => {
-    return Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  }, [daysInMonth]);
+    if (!bulan) return Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const [year, month] = bulan.split("-").map(Number);
+    const days: number[] = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow !== 0 && dow !== 6) days.push(d);
+    }
+    return days;
+  }, [daysInMonth, bulan]);
 
   const daftarKelas = useMemo(() => {
     const classes = Array.from(new Set(dataRekap.map((s) => s.kelas))).filter(Boolean);
@@ -392,7 +402,8 @@ export default function RekapitulasiMatrixPage() {
       });
 
       // Monthly statuses (1..daysInMonth)
-      const monthlyStatuses = daysArray.map((d) => {
+      const monthlyStatuses = Array.from({ length: daysInMonth }, (_, i) => {
+        const d = i + 1;
         const raw = (s.dailyLogs[String(d)] || "").toUpperCase().trim();
         if (raw === "SAKIT") return "S";
         if (raw === "IZIN") return "I";
@@ -992,7 +1003,15 @@ export default function RekapitulasiMatrixPage() {
               {isFetching ? (
                 <TableRow>
                   <TableCell
-                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : mode === "MINGGUAN" ? 11 : mode === "KUSTOM" ? customDaysArray.length + 6 : 3}
+                    colSpan={
+                      mode === "BULANAN"
+                        ? daysArray.length + 3
+                        : mode === "MINGGUAN"
+                        ? weekInfo.days.length + 6
+                        : mode === "KUSTOM"
+                        ? customDaysArray.length + 6
+                        : 3
+                    }
                     className="h-64 text-center text-muted-foreground"
                   >
                     Mencari data ke Spreadsheet...
@@ -1001,7 +1020,15 @@ export default function RekapitulasiMatrixPage() {
               ) : displayedData.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={mode === "BULANAN" ? daysInMonth + 3 : mode === "MINGGUAN" ? 11 : mode === "KUSTOM" ? customDaysArray.length + 6 : 3}
+                    colSpan={
+                      mode === "BULANAN"
+                        ? daysArray.length + 3
+                        : mode === "MINGGUAN"
+                        ? weekInfo.days.length + 6
+                        : mode === "KUSTOM"
+                        ? customDaysArray.length + 6
+                        : 3
+                    }
                     className="h-64 text-center text-muted-foreground"
                   >
                     Tidak ada siswa yang sesuai dengan filter.
