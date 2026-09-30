@@ -75,7 +75,7 @@ export default function RekapitulasiMatrixPage() {
         dayIndex: cur.getDate(),
         dayName: dayNames[i],
         dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
-        dateFull: cur.toISOString().split("T")[0],
+        dateFull: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}-${String(cur.getDate()).padStart(2, "0")}`,
       });
     }
 
@@ -121,7 +121,7 @@ export default function RekapitulasiMatrixPage() {
           dayIndex: dayNum,
           dayName: shortDayNames[dow],
           dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
-          dateFull: iter.toISOString().split("T")[0],
+          dateFull: `${iter.getFullYear()}-${String(iter.getMonth() + 1).padStart(2, "0")}-${String(iter.getDate()).padStart(2, "0")}`,
         });
       }
       iter.setDate(iter.getDate() + 1);
