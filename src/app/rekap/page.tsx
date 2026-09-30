@@ -338,7 +338,8 @@ export default function RekapitulasiMatrixPage() {
   };
 
   // Helper to build report config based on current active mode (HARIAN, MINGGUAN, BULANAN, KUSTOM)
-  const buildReportConfig = (): ReportConfig => {
+  // isForExcel=true → include ALL students in selected class/tingkat (bypass absence filter)
+  const buildReportConfig = (isForExcel: boolean = false): ReportConfig => {
     if (!tanggalHarian) throw new Error("Tanggal belum diset");
     const dateObj = new Date(`${tanggalHarian}T00:00:00`);
     const dayNames = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu"];
@@ -356,7 +357,10 @@ export default function RekapitulasiMatrixPage() {
 
     // Target students filter
     let targetStudents: RekapRow[] = [];
-    if (mode === "HARIAN") {
+    if (isForExcel) {
+      // Excel: all students for the selected class/tingkat (no absence filter)
+      targetStudents = displayedData;
+    } else if (mode === "HARIAN") {
       targetStudents = absentDailyData.length > 0 ? absentDailyData : displayedData.filter((s) => s.sakit > 0 || s.izin > 0 || s.alpha > 0);
     } else {
       // Mingguan, Bulanan, Kustom: show all students with any absence in the dataset
@@ -435,11 +439,23 @@ export default function RekapitulasiMatrixPage() {
     };
   };
 
+  const handleDownloadExcel = async () => {
+    if (dataRekap.length === 0) return toast.error("Data rekap masih kosong.");
+    try {
+      const config = buildReportConfig(true);
+      await downloadReportExcel(config);
+      toast.success(`Laporan Excel (${mode}) berhasil diunduh.`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Gagal men-generate Excel.");
+    }
+  };
+
   const handleDownloadImage = async () => {
     if (dataRekap.length === 0) return toast.error("Data rekap masih kosong.");
     setIsGeneratingImg(true);
     try {
-      const config = buildReportConfig();
+      const config = buildReportConfig(false);
       await downloadReportImage(config);
       toast.success(`Gambar laporan presensi (${mode}) berhasil diunduh.`);
     } catch (e) {
@@ -454,7 +470,7 @@ export default function RekapitulasiMatrixPage() {
     if (dataRekap.length === 0) return toast.error("Data rekap masih kosong.");
     setIsGeneratingImg(true);
     try {
-      const config = buildReportConfig();
+      const config = buildReportConfig(false);
       const success = await copyReportImageToClipboard(config);
       if (success) {
         toast.success(`Gambar laporan (${mode}) disalin! Bisa langsung Paste (Ctrl+V) ke WhatsApp.`);
@@ -527,17 +543,7 @@ export default function RekapitulasiMatrixPage() {
               Unduh Gambar ({mode})
             </Button>
             <Button
-              onClick={async () => {
-                if (dataRekap.length === 0) return toast.error("Data rekap masih kosong.");
-                try {
-                  const config = buildReportConfig();
-                  await downloadReportExcel(config);
-                  toast.success(`Laporan Excel (${mode}) berhasil diunduh.`);
-                } catch (e) {
-                  console.error(e);
-                  toast.error("Gagal men-generate Excel.");
-                }
-              }}
+              onClick={handleDownloadExcel}
               disabled={isFetching || isGeneratingImg || dataRekap.length === 0}
               variant="outline"
               size="sm"

@@ -129,32 +129,37 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     ws.columns = [
       { width: 5 }, { width: 12 }, { width: 12 }, { width: 35 },
       { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 }, // 5 days
-      { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 } // S I A Tot
+      { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 }, // S I A Tot
+      { width: 14 }, { width: 14 }, // % TIDAK HADIR, % HADIR
     ];
 
-    ws.mergeCells(`A${currentRow}:D${currentRow}`);
-    const titleCell = ws.getCell(`A${currentRow}`);
+    ws.mergeCells(currentRow, 1, currentRow, 4);
+    const titleCell = ws.getCell(currentRow, 1);
     titleCell.value = `PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
     applyStyle(titleCell, "FFBBF7D0", "FF064E3B", true, centerAlign);
 
-    ws.mergeCells(`E${currentRow}:I${currentRow}`);
-    const wWeek = ws.getCell(`E${currentRow}`);
+    ws.mergeCells(currentRow, 5, currentRow, 9);
+    const wWeek = ws.getCell(currentRow, 5);
     wWeek.value = config.periodeMinggu || "PERIODE MINGGUAN";
     applyStyle(wWeek, "FFF8FAFC", "FF334155", true, centerAlign);
 
-    ws.mergeCells(`J${currentRow}:M${currentRow}`);
-    const wKet = ws.getCell(`J${currentRow}`);
+    ws.mergeCells(currentRow, 10, currentRow, 13);
+    const wKet = ws.getCell(currentRow, 10);
     wKet.value = "JUMLAH KETIDAKHADIRAN";
     applyStyle(wKet, "FFF1F5F9", "FF1E293B", true, centerAlign);
+
+    ws.mergeCells(currentRow, 14, currentRow, 15);
+    const wPersen = ws.getCell(currentRow, 14);
+    wPersen.value = "PERSENTASE";
+    applyStyle(wPersen, "FFF1F5F9", "FF1E293B", true, centerAlign);
 
     ws.getRow(currentRow).height = 25;
     currentRow++;
 
     const headers = ["NO", "KELAS", "NIS", "NAMA"];
     headers.forEach((h, i) => {
-      const colChar = String.fromCharCode(65 + i);
-      ws.mergeCells(`${colChar}${currentRow}:${colChar}${currentRow + 1}`);
-      const c = ws.getCell(`${colChar}${currentRow}`);
+      ws.mergeCells(currentRow, i + 1, currentRow + 1, i + 1);
+      const c = ws.getCell(currentRow, i + 1);
       c.value = h;
       applyStyle(c, "FFF8FAFC", "FF000000", true, centerAlign);
     });
@@ -166,12 +171,11 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     ];
 
     weekList.forEach((wd, idx) => {
-      const colChar = String.fromCharCode(69 + idx); // E, F, G, H, I
-      const c1 = ws.getCell(`${colChar}${currentRow}`);
+      const c1 = ws.getCell(currentRow, 5 + idx);
       c1.value = wd.dayName;
       applyStyle(c1, "FFF8FAFC", "FF000000", true, centerAlign);
       c1.font.size = 10;
-      const c2 = ws.getCell(`${colChar}${currentRow + 1}`);
+      const c2 = ws.getCell(currentRow + 1, 5 + idx);
       c2.value = wd.dateShort;
       applyStyle(c2, "FFF8FAFC", "FF000000", true, centerAlign);
       c2.font.size = 10;
@@ -185,12 +189,24 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     ];
 
     ketHeaders.forEach((k, idx) => {
-      const colChar = String.fromCharCode(74 + idx); // J, K, L, M
-      ws.mergeCells(`${colChar}${currentRow}:${colChar}${currentRow + 1}`);
-      const c = ws.getCell(`${colChar}${currentRow}`);
+      ws.mergeCells(currentRow, 10 + idx, currentRow + 1, 10 + idx);
+      const c = ws.getCell(currentRow, 10 + idx);
       c.value = k.label;
       applyStyle(c, k.bg, k.fc, true, centerAlign);
     });
+
+    // PERSENTASE subheaders
+    ws.mergeCells(currentRow, 14, currentRow + 1, 14);
+    const ph1 = ws.getCell(currentRow, 14);
+    ph1.value = "TIDAK HADIR";
+    applyStyle(ph1, "FFFFE4E6", "FFBE123C", true, centerAlign);
+    ph1.font.size = 9;
+
+    ws.mergeCells(currentRow, 15, currentRow + 1, 15);
+    const ph2 = ws.getCell(currentRow, 15);
+    ph2.value = "HADIR";
+    applyStyle(ph2, "FFDCFCE7", "FF166534", true, centerAlign);
+    ph2.font.size = 9;
 
     ws.getRow(currentRow).height = 16;
     ws.getRow(currentRow + 1).height = 16;
@@ -233,41 +249,63 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(13).value = row.total;
       applyStyle(r.getCell(13), "FFF8FAFC", "FF0F172A", true, centerAlign);
 
+      const totalDaysMinggu = 5;
+      const tidakHadirMinggu = row.total;
+      const pctTidakHadirMinggu = totalDaysMinggu > 0 ? tidakHadirMinggu / totalDaysMinggu : 0;
+      const pctHadirMinggu = totalDaysMinggu > 0 ? (totalDaysMinggu - tidakHadirMinggu) / totalDaysMinggu : 1;
+
+      const cPTH = r.getCell(14);
+      cPTH.value = pctTidakHadirMinggu;
+      cPTH.numFmt = "0.00%";
+      applyStyle(cPTH, defaultBg, "FFBE123C", false, centerAlign);
+
+      const cPH = r.getCell(15);
+      cPH.value = pctHadirMinggu;
+      cPH.numFmt = "0.00%";
+      if (pctHadirMinggu < 0.90) {
+        applyStyle(cPH, "FFFFFFEE58".replace("FF", "FF"), "FF9C0006", true, centerAlign);
+        cPH.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEE58" } };
+      } else {
+        applyStyle(cPH, defaultBg, "FF166534", false, centerAlign);
+      }
+      cPH.numFmt = "0.00%";
+
       currentRow++;
     });
 
     const foot1 = ws.getRow(currentRow);
     foot1.height = 20;
-    ws.mergeCells(`A${currentRow}:D${currentRow}`);
+    ws.mergeCells(currentRow, 1, currentRow, 4);
     foot1.getCell(1).value = "TOTAL SISWA TIDAK HADIR";
     applyStyle(foot1.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
-    ws.mergeCells(`E${currentRow}:I${currentRow}`);
+    ws.mergeCells(currentRow, 5, currentRow, 9);
     foot1.getCell(5).value = config.totalTidakHadir;
     applyStyle(foot1.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(`J${currentRow}:M${currentRow}`);
+    ws.mergeCells(currentRow, 10, currentRow, 15);
     applyStyle(foot1.getCell(10), "FFF8FAFC", "FF000000", false, centerAlign);
     currentRow++;
 
     const foot2 = ws.getRow(currentRow);
     foot2.height = 20;
-    ws.mergeCells(`A${currentRow}:D${currentRow}`);
+    ws.mergeCells(currentRow, 1, currentRow, 4);
     foot2.getCell(1).value = "PROSENTASE KETIDAKHADIRAN";
     applyStyle(foot2.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
-    ws.mergeCells(`E${currentRow}:I${currentRow}`);
+    ws.mergeCells(currentRow, 5, currentRow, 9);
     const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     foot2.getCell(5).value = percentage;
     applyStyle(foot2.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(`J${currentRow}:M${currentRow}`);
+    ws.mergeCells(currentRow, 10, currentRow, 15);
     applyStyle(foot2.getCell(10), "FFF8FAFC", "FF000000", false, centerAlign);
 
   } else if (config.mode === "KUSTOM") {
     const customDayList = config.customDays || [];
     const nDays = customDayList.length;
-    // Cols: NO, KELAS, NIS, NAMA, N day cols, S, I, A, Tot
+    // Cols: NO, KELAS, NIS, NAMA, N day cols, S, I, A, Tot, %TH, %H
     ws.columns = [
       { width: 5 }, { width: 12 }, { width: 12 }, { width: 35 },
       ...Array(nDays).fill({ width: 8 }),
       { width: 8 }, { width: 8 }, { width: 8 }, { width: 8 },
+      { width: 14 }, { width: 14 },
     ];
 
     // Title row
@@ -281,6 +319,8 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     const dayEndCol = 4 + nDays;
     const ketStartCol = dayEndCol + 1;
     const ketEndCol = dayEndCol + 4;
+    const pctTHCol = ketEndCol + 1;
+    const pctHCol = ketEndCol + 2;
 
     if (nDays > 0) {
       ws.mergeCells(currentRow, dayStartCol, currentRow, dayEndCol);
@@ -293,6 +333,11 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     const wKet = ws.getCell(currentRow, ketStartCol);
     wKet.value = "JUMLAH KETIDAKHADIRAN";
     applyStyle(wKet, "FFF1F5F9", "FF1E293B", true, centerAlign);
+
+    ws.mergeCells(currentRow, pctTHCol, currentRow, pctHCol);
+    const wPersenK = ws.getCell(currentRow, pctTHCol);
+    wPersenK.value = "PERSENTASE";
+    applyStyle(wPersenK, "FFF1F5F9", "FF1E293B", true, centerAlign);
 
     ws.getRow(currentRow).height = 25;
     currentRow++;
@@ -331,6 +376,19 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       c.value = k.label;
       applyStyle(c, k.bg, k.fc, true, centerAlign);
     });
+
+    // PERSENTASE subheaders for KUSTOM
+    ws.mergeCells(currentRow, pctTHCol, currentRow + 1, pctTHCol);
+    const kph1 = ws.getCell(currentRow, pctTHCol);
+    kph1.value = "TIDAK HADIR";
+    applyStyle(kph1, "FFFFE4E6", "FFBE123C", true, centerAlign);
+    kph1.font.size = 9;
+
+    ws.mergeCells(currentRow, pctHCol, currentRow + 1, pctHCol);
+    const kph2 = ws.getCell(currentRow, pctHCol);
+    kph2.value = "HADIR";
+    applyStyle(kph2, "FFDCFCE7", "FF166534", true, centerAlign);
+    kph2.font.size = 9;
 
     ws.getRow(currentRow).height = 16;
     ws.getRow(currentRow + 1).height = 16;
@@ -374,6 +432,27 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(ketStartCol + 3).value = row.total;
       applyStyle(r.getCell(ketStartCol + 3), "FFF8FAFC", "FF0F172A", true, centerAlign);
 
+      const totalDaysKustom = config.customDays?.length || 0;
+      const tidakHadirKustom = row.total;
+      const pctTidakHadirKustom = totalDaysKustom > 0 ? tidakHadirKustom / totalDaysKustom : 0;
+      const pctHadirKustom = totalDaysKustom > 0 ? (totalDaysKustom - tidakHadirKustom) / totalDaysKustom : 1;
+
+      const cKPTH = r.getCell(pctTHCol);
+      cKPTH.value = pctTidakHadirKustom;
+      cKPTH.numFmt = "0.00%";
+      applyStyle(cKPTH, defaultBg, "FFBE123C", false, centerAlign);
+
+      const cKPH = r.getCell(pctHCol);
+      cKPH.value = pctHadirKustom;
+      cKPH.numFmt = "0.00%";
+      if (pctHadirKustom < 0.90) {
+        applyStyle(cKPH, "FFFFEE58", "FF9C0006", true, centerAlign);
+        cKPH.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEE58" } };
+      } else {
+        applyStyle(cKPH, defaultBg, "FF166534", false, centerAlign);
+      }
+      cKPH.numFmt = "0.00%";
+
       currentRow++;
     });
 
@@ -388,7 +467,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     }
     foot1.getCell(dayStartCol).value = config.totalTidakHadir;
     applyStyle(foot1.getCell(dayStartCol), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(currentRow, ketStartCol, currentRow, ketEndCol);
+    ws.mergeCells(currentRow, ketStartCol, currentRow, pctHCol);
     applyStyle(foot1.getCell(ketStartCol), "FFF8FAFC", "FF000000", false, centerAlign);
     currentRow++;
 
@@ -403,7 +482,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     foot2.getCell(dayStartCol).value = percentage;
     applyStyle(foot2.getCell(dayStartCol), "FFFED7AA", "FF7C2D12", true, centerAlign);
-    ws.mergeCells(currentRow, ketStartCol, currentRow, ketEndCol);
+    ws.mergeCells(currentRow, ketStartCol, currentRow, pctHCol);
     applyStyle(foot2.getCell(ketStartCol), "FFF8FAFC", "FF000000", false, centerAlign);
 
   } else {
@@ -535,21 +614,32 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(8).font.size = 10;
 
       // Kalkulasi persentase per anak
-      const persenTidakHadir = (totalAbsen / dim) * 100;
-      const persenHadir = 100 - persenTidakHadir;
+      const persenTidakHadir = dim > 0 ? totalAbsen / dim : 0;
+      const persenHadir = dim > 0 ? (dim - totalAbsen) / dim : 1;
 
-      if (persenHadir < 90) {
+      if (persenHadir < 0.90) {
         totalSiswaBermasalah++;
         countPerKelas[row.kelas] = (countPerKelas[row.kelas] || 0) + 1;
       }
 
-      r.getCell(9).value = persenTidakHadir === 0 ? "-" : persenTidakHadir.toFixed(2) + "%";
-      applyStyle(r.getCell(9), defaultBg, "FFBE123C", false, centerAlign);
+      const c9 = r.getCell(9);
+      c9.value = persenTidakHadir === 0 ? 0 : persenTidakHadir;
+      c9.numFmt = "0.00%";
+      applyStyle(c9, defaultBg, "FFBE123C", false, centerAlign);
+      c9.numFmt = "0.00%";
       r.getCell(9).font.size = 10;
 
-      r.getCell(10).value = persenHadir.toFixed(2) + "%";
-      applyStyle(r.getCell(10), persenHadir < 90 ? "FFFEF08A" : defaultBg, persenHadir < 90 ? "FFB45309" : "FF166534", persenHadir < 90, centerAlign);
-      r.getCell(10).font.size = 10;
+      const c10 = r.getCell(10);
+      c10.value = persenHadir;
+      c10.numFmt = "0.00%";
+      if (persenHadir < 0.90) {
+        applyStyle(c10, "FFFFEE58", "FF9C0006", true, centerAlign);
+        c10.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFEE58" } };
+      } else {
+        applyStyle(c10, defaultBg, "FF166534", false, centerAlign);
+      }
+      c10.numFmt = "0.00%";
+      c10.font.size = 10;
 
       currentRow++;
     });
