@@ -44,10 +44,17 @@ export default function RekapitulasiMatrixPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setBulan(new Date().toISOString().substring(0, 7));
-    setTanggalHarian(new Date().toISOString().substring(0, 10));
-    setStartDate(new Date().toISOString().substring(0, 10));
-    setEndDate(new Date().toISOString().substring(0, 10));
+    const today = new Date();
+    const localYYYY = today.getFullYear();
+    const localMM = String(today.getMonth() + 1).padStart(2, "0");
+    const localDD = String(today.getDate()).padStart(2, "0");
+    const localTodayStr = `${localYYYY}-${localMM}-${localDD}`;
+    const localMonthStr = `${localYYYY}-${localMM}`;
+
+    setBulan(localMonthStr);
+    setTanggalHarian(localTodayStr);
+    setStartDate(localTodayStr);
+    setEndDate(localTodayStr);
     setIsMounted(true);
   }, []);
 
