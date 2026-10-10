@@ -1,0 +1,49 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+function load(file) { const m = {exports:{}}; new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(require,m,m.exports); return m.exports; }
+const page = fs.readFileSync('src/app/rekap/page.tsx','utf8');
+assert(!page.includes('const key = mode === "KUSTOM" ? wd.dateFull : String(wd.dayIndex)'), 'Weekly reports must use full-date keys across month boundaries');
+const {dateKey, jakartaToday, cappedRange, reportStatus, periodCounts, absenceRate} = load('src/lib/reportData.ts');
+assert.equal(dateKey(new Date(2026, 0, 1)), '2026-01-01');
+assert.equal(jakartaToday(new Date('2026-01-01T18:00:00Z')), '2026-01-02');
+assert.deepEqual(cappedRange('2026-01-01','2026-04-01'), ['2026-01-01','2026-03-01']);
+assert.equal(reportStatus({}, '2026-01-02', false, '2026-01-02'), 'HADIR');
+assert.equal(reportStatus({}, '2026-01-03', false, '2026-01-02'), '');
+assert.equal(reportStatus({'2':'IZIN'},'2026-01-02',true,'2026-01-02'),'IZIN');
+assert.equal(reportStatus({'2':'IZIN'},'2026-01-02',false,'2026-01-02'),'HADIR');
+assert.deepEqual(periodCounts({'2026-01-30':'SAKIT','2026-02-02':'ALPHA','2026-01-29':'IZIN'},['2026-01-30','2026-02-02'],false,'2026-02-02'),{sakit:1,izin:0,alpha:1,totalTidakHadir:2});
+assert.equal(absenceRate(6,5),1);
+assert.equal(absenceRate(3,10),0.3);
+console.log('Report date, status, period and denominator fixtures passed');
+(async () => {
+  const ExcelJS = require('exceljs');
+  let saved;
+  const module = {exports:{}};
+  const code = ts.transpileModule(fs.readFileSync('src/lib/reportExcel.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+  const reportData = load('src/lib/reportData.ts');
+  new Function('require','module','exports',code)(name => name === 'file-saver' ? {saveAs:blob => {saved = blob;}} : name === './reportData' ? reportData : require(name), module, module.exports);
+  const item = {no:1,kelas:'XI A',nis:'001',nama:'Present',statusToday:'H',sakit:0,izin:0,alpa:0,total:0};
+  const config = {mode:'HARIAN',tingkat:'XI',bulanTahun:'Januari 2026',namaHari:'Jumat',tanggalSingkat:'02/01/26',totalTidakHadir:0,totalSiswa:1,schoolDays:1,items:[item]};
+  await module.exports.downloadReportExcel(config);
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.from(await saved.arrayBuffer()));
+  assert(wb.worksheets[0].getColumn(5).values.includes('H'), 'Daily Excel must retain present students as H');
+  await module.exports.downloadReportExcel({...config,mode:'MINGGUAN',schoolDays:5,totalTidakHadir:6,items:[{...item,sakit:6,total:6,weeklyStatuses:['S','S','S','S','S']}],weekDays:[]});
+  await wb.xlsx.load(Buffer.from(await saved.arrayBuffer()));
+  assert(wb.worksheets[0].getColumn(14).values.includes(1), 'Absence percentage must not exceed 100%');
+  assert(wb.worksheets[0].getColumn(15).values.includes(0), 'Presence percentage must not be negative');
+  console.log('ExcelJS XLSX daily H and bounded weekly percentage roundtrips passed');
+})().catch(error => {console.error(error);process.exitCode=1;});
+// Execute the page's actual config builder with a selected-period fixture.
+const builder = page.slice(page.indexOf('  const buildReportConfig ='), page.indexOf('  const handleDownloadExcel'));
+const builderCode = ts.transpileModule(builder + '\nreturn buildReportConfig;', {compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
+const fixture = {nis:'1',nama:'Student',kelas:'XI A',sakit:0,izin:0,alpha:0,totalTidakHadir:0,dailyLogs:{'1':'SAKIT'}};
+const scope = {tanggalHarian:'2026-01-02',bulan:'2026-02',mode:'HARIAN',displayedData:[fixture],absentDailyData:[],customDaysArray:[],weekInfo:{days:[],periodeMinggu:''},daysInMonth:28,startDate:'2026-01-02',endDate:'2026-01-02',tingkat:'XI',periodDates:['2026-01-02'],getStatusLetter:status=>({HADIR:'H',SAKIT:'S',IZIN:'I',ALPHA:'A'}[status]||''),reportStatus:load('src/lib/reportData.ts').reportStatus};
+function build(overrides={}) {const values={...scope,...overrides};return new Function(...Object.keys(values),builderCode)(...Object.values(values));}
+assert.equal(build()(false).items.length,0,'Empty selected-day absence image must remain empty despite earlier monthly sickness');
+assert.equal(build()(true).items[0].statusToday,'H','Daily Excel config includes present filtered pupils');
+assert.equal(build({mode:'BULANAN'})(true).bulanTahun,'Februari 2026','Monthly title uses selected month');
+assert.equal(build({mode:'KUSTOM'})(true).bulanTahun,'2026-01-02 - 2026-01-02','Custom title uses selected range');
+assert.equal(build()(true).totalSiswa,1,'Denominator is filtered pupil count');
+console.log('Page export builder selected-day, title and scoped-denominator fixtures passed');

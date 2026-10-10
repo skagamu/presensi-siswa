@@ -8,10 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
-import { getDashboardStats, getPeringatanKasus, resolveCase, PeringatanKasus } from "@/lib/api";
+import { getDashboardStats, getBankKasus, getPeringatanKasus, resolveCase, PeringatanKasus } from "@/lib/api";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -30,46 +29,19 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [chartMode, setChartMode] = useState<"weekly" | "monthly">("weekly");
 
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // Stats via GAS API
-      const resStats = await getDashboardStats();
-      if (resStats.status === "success" && resStats.data) setStats(resStats.data as unknown as StatsData);
-
-      // Active alerts via GAS API
-      const resAlerts = await getPeringatanKasus({ status_peringatan: "AKTIF" });
-      if (resAlerts.status === "success" && resAlerts.data) {
-        const sorted = [...resAlerts.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif);
-        setAlerts(sorted);
-      }
-
-      // Bank Kasus via gviz (no dedicated GAS endpoint)
-      const gvizUrlKasus = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=BankKasus&_v=${new Date().getTime()}`;
-      const resKasus = await fetch(gvizUrlKasus, { mode: 'cors', credentials: 'omit' });
-      const textKasus = await resKasus.text();
-      const jsonMatchKasus = textKasus.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-      if (jsonMatchKasus && jsonMatchKasus[1]) {
-        const json = JSON.parse(jsonMatchKasus[1]);
-        if (json.status === "ok") {
-          const rows = json.table.rows;
-          const listKasus: KasusTerakhir[] = [];
-          rows.forEach((row: any) => {
-            const c = row.c;
-            if (c && c[0]) {
-              let tgl = "";
-              if (c[1]?.f) tgl = c[1].f;
-              else if (c[1]?.v) tgl = String(c[1].v).replace("Date(", "").replace(")", "");
-              listKasus.push({ idKasus: c[0].v, tanggal: tgl, nama: c[3]?.v || "", kelas: c[4]?.v || "", pelanggaran: c[5]?.v || "" });
-            }
-          });
-          setKasusTerakhir(listKasus.slice(-5).reverse());
-        }
-      }
-    } catch (err: any) {
-      toast.error(`Error mengambil data: ${err.message}`);
+      const [resStats, resAlerts, resKasus] = await Promise.all([
+        getDashboardStats(), getPeringatanKasus({ status_peringatan: "AKTIF" }), getBankKasus(),
+      ]);
+      for (const res of [resStats, resAlerts, resKasus]) if (res.status !== "success") throw new Error(res.message || "Gagal memuat dashboard.");
+      if (resStats.data) setStats(resStats.data);
+      if (resAlerts.data) setAlerts([...resAlerts.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif));
+      if (resKasus.data) setKasusTerakhir(resKasus.data.slice(-5).reverse().map(k => ({ idKasus: k.id_kasus, tanggal: k.tanggal, nama: k.nama, kelas: k.kelas, pelanggaran: k.jenis_pelanggaran })));
+    } catch (err) {
+      toast.error(`Error mengambil data: ${err instanceof Error ? err.message : "Koneksi gagal"}`);
     } finally {
       setIsLoading(false);
     }
@@ -101,6 +73,7 @@ export default function DashboardPage() {
     const notesInput = form.querySelector(`textarea`) as HTMLTextAreaElement | null;
     const notes = notesInput?.value || "Diselesaikan";
 
+    if (!fileInput?.files?.[0]) return toast.error("Lampirkan bukti penyelesaian terlebih dahulu.");
     let fileBase64 = "";
     let fileName = "";
 
@@ -113,7 +86,7 @@ export default function DashboardPage() {
       try {
         fileBase64 = await fileToBase64(file);
         fileName = file.name;
-      } catch (err) {
+      } catch {
         return toast.error("Gagal membaca file.");
       }
     }
@@ -128,8 +101,8 @@ export default function DashboardPage() {
         kelas: alert.kelas,
         catatan_konseling: notes,
         ditangani_oleh: "Guru BK",
-        fileName: fileName || "bukti.pdf",
-        fileBase64: fileBase64 || "dummy",
+        fileName,
+        fileBase64,
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
@@ -137,7 +110,7 @@ export default function DashboardPage() {
       } else {
         toast.error("Gagal resolve: " + res.message);
       }
-    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); }
+    } catch { toast.error("Gagal mengirim perintah resolusi."); }
     finally { setIsUploading(null); }
   };
 
@@ -247,7 +220,7 @@ export default function DashboardPage() {
                                 <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border flex flex-col gap-2"><p>Tindakan yang disarankan: <strong>{getTindakanInfo(alert.tingkat_kumulatif)}</strong>.</p></div>
                                 <div className="space-y-2 pt-2">
                                   <Label htmlFor={`file-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-                                  <Input id={`file-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                                  <Input id={`file-${alert.id_peringatan}`} name="file" type="file" required accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
                                   <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
                                 </div>
                                 <div className="space-y-2"><Label htmlFor={`notes-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>

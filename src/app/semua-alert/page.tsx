@@ -26,7 +26,7 @@ export default function SemuaAlertPage() {
         const sorted = [...res.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif);
         setAlerts(sorted);
       }
-    } catch (err) {
+    } catch {
       toast.error("Gagal menarik data antrean.");
     } finally {
       setIsFetching(false);
@@ -55,6 +55,7 @@ export default function SemuaAlertPage() {
     const notesInput = form.querySelector(`textarea`) as HTMLTextAreaElement | null;
     const notes = notesInput?.value || "Diselesaikan";
 
+    if (!fileInput?.files?.[0]) return toast.error("Lampirkan bukti penyelesaian terlebih dahulu.");
     let fileBase64 = "";
     let fileName = "";
 
@@ -67,7 +68,7 @@ export default function SemuaAlertPage() {
       try {
         fileBase64 = await fileToBase64(file);
         fileName = file.name;
-      } catch (err) {
+      } catch {
         return toast.error("Gagal membaca file.");
       }
     }
@@ -82,14 +83,14 @@ export default function SemuaAlertPage() {
         kelas: alert.kelas,
         catatan_konseling: notes,
         ditangani_oleh: "Guru BK",
-        fileName: fileName || "bukti.pdf",
-        fileBase64: fileBase64 || "dummy",
+        fileName,
+        fileBase64,
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
         setAlerts(alerts.filter(a => a.id_peringatan !== idPeringatan));
       } else { toast.error("Gagal resolve: " + res.message); }
-    } catch (error) { toast.error("Gagal mengirim perintah resolusi."); }
+    } catch { toast.error("Gagal mengirim perintah resolusi."); }
     finally { setIsUploading(null); }
   };
 
@@ -156,7 +157,7 @@ export default function SemuaAlertPage() {
                             <div className="p-3 bg-gray-50 text-gray-700 text-sm rounded-md border"><p>Rekomendasi: <strong>{getTindakanInfo(alert.tingkat_kumulatif)}</strong>.</p></div>
                             <div className="space-y-2 pt-2">
                               <Label htmlFor={`file-m-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-                              <Input id={`file-m-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                              <Input id={`file-m-${alert.id_peringatan}`} name="file" type="file" required accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
                               <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
                             </div>
                             <div className="space-y-2"><Label htmlFor={`notes-m-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-m-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
@@ -232,7 +233,7 @@ export default function SemuaAlertPage() {
                                   </div>
                                   <div className="space-y-2 pt-2">
                                     <Label htmlFor={`file-d-${alert.id_peringatan}`}>Upload Bukti (PDF, Word, Excel, Foto)</Label>
-                                    <Input id={`file-d-${alert.id_peringatan}`} name="file" type="file" accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
+                                    <Input id={`file-d-${alert.id_peringatan}`} name="file" type="file" required accept={ACCEPT_FILE_TYPES} className="cursor-pointer text-xs" />
                                     <p className="text-[11px] text-gray-500">Mendukung .pdf, .docx, .xlsx, .jpg, .png (Maks. 10MB)</p>
                                   </div>
                                   <div className="space-y-2"><Label htmlFor={`notes-d-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-d-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>

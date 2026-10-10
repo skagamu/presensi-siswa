@@ -53,8 +53,6 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
 
   if (!siswa) return null;
 
-  const totalAbsen = siswa.totalAlpha + siswa.totalSakit + siswa.totalIzin;
-
   const getEmbedUrl = (url: string) => {
     if (!url) return "";
     if (url.includes("drive.google.com/file/d/")) {
@@ -279,7 +277,7 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
             )}
           </TabsContent>
         </Tabs>
-      
+
         {/* MODAL PREVIEW BUKTI */}
         <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
           <DialogContent className="max-w-3xl h-[85vh] p-0 overflow-hidden flex flex-col bg-slate-900 border-slate-800 rounded-2xl [&>button]:hidden">

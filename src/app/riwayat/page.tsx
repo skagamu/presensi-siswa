@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { getPenyelesaianKasus } from "@/lib/api";
+import { toast } from "sonner";
 import { FileCheck, Search, X, RefreshCw, ExternalLink, Calendar, User, Eye, FileText } from "lucide-react";
 
 interface RiwayatKasus {
@@ -31,42 +33,14 @@ export default function RiwayatPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewTitle, setPreviewTitle] = useState<string>("");
 
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
-
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=PenyelesaianKasus&_v=${Date.now()}`;
-      const res = await fetch(url);
-      const text = await res.text();
-      const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-      if (match && match[1]) {
-        const json = JSON.parse(match[1]);
-        const rows = json.table.rows || [];
-        const parsed: RiwayatKasus[] = [];
-        rows.forEach((r: any) => {
-          const c = r.c;
-          if (c && c[1]) {
-            parsed.push({
-              tanggal: c[1]?.f || c[1]?.v || "",
-              nis: String(c[2]?.v || "").trim(),
-              nama: String(c[3]?.v || "").trim(),
-              kelas: String(c[4]?.v || "").trim(),
-              tindakan: String(c[5]?.v || "").trim(),
-              linkPdf: c[6]?.v ? String(c[6].v).trim() : undefined,
-              guruBK: String(c[7]?.v || "").trim(),
-              waktuSelesai: c[8]?.f || c[8]?.v || "",
-            });
-          }
-        });
-        parsed.reverse();
-        setHistoryList(parsed);
-      }
-    } catch (err) {
-      console.error("Gagal load data penyelesaian:", err);
-    } finally {
-      setIsLoading(false);
-    }
+      const res = await getPenyelesaianKasus();
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Data tidak tersedia.");
+      setHistoryList(res.data.slice().reverse().map(p => ({ tanggal: p.waktu_selesai.slice(0, 10), nis: p.nis, nama: p.nama, kelas: p.kelas, tindakan: p.catatan_konseling, linkPdf: p.link_pdf_drive, guruBK: p.ditangani_oleh, waktuSelesai: p.waktu_selesai })));
+    } catch { toast.error("Gagal memuat riwayat. Coba muat ulang."); }
+    finally { setIsLoading(false); }
   };
 
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { getLogPresensi } from "@/lib/api";
+import { todayWib } from "@/lib/date";
 import JSZip from "jszip";
 import { toast } from "sonner";
 
@@ -15,52 +17,15 @@ export interface AbsenceDetail {
   status: string;
 }
 
-const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
+export function escapeXml(value: string | number): string {
+  return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[char]!));
+}
 
 async function fetchStudentAbsenceLogs(nis: string): Promise<AbsenceDetail[]> {
-  try {
-    const cleanNis = String(nis).replace(/[^0-9]/g, "");
-    const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=LogPresensi&_v=${Date.now()}`;
-    const res = await fetch(gvizUrl);
-    const text = await res.text();
-    const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-    if (!match || !match[1]) return [];
-    
-    const json = JSON.parse(match[1]);
-    const rows = json.table.rows || [];
-    const logs: AbsenceDetail[] = [];
-
-    rows.forEach((r: any) => {
-      const c = r.c;
-      if (c && c[1] && c[2] && c[5]) {
-        const rowNis = String(c[2].v || "").replace(/[^0-9]/g, "");
-        const status = String(c[5].v || "").toUpperCase().trim();
-        if (rowNis === cleanNis && ["SAKIT", "IZIN", "ALPHA"].includes(status)) {
-          let tglStr = "";
-          if (c[1].f) {
-            tglStr = c[1].f;
-          } else if (c[1].v) {
-            const raw = String(c[1].v);
-            if (raw.includes("Date(")) {
-              const p = raw.replace("Date(", "").replace(")", "").split(",");
-              const y = p[0];
-              const m = String(parseInt(p[1]) + 1).padStart(2, "0");
-              const d = String(parseInt(p[2])).padStart(2, "0");
-              tglStr = `${d}/${m}/${y}`;
-            } else {
-              tglStr = raw.substring(0, 10);
-            }
-          }
-          logs.push({ tanggal: tglStr || "-", status });
-        }
-      }
-    });
-
-    return logs;
-  } catch (e) {
-    console.error("Gagal mengambil histori absen", e);
-    return [];
-  }
+  const res = await getLogPresensi({ nis });
+  if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal mengambil histori absen.");
+  return res.data.filter(log => log.nis === nis && ["SAKIT", "IZIN", "ALPHA"].includes(log.status_presensi))
+    .map(log => ({ tanggal: log.tanggal, status: log.status_presensi }));
 }
 
 export async function generateSuratTugasDocx(alert: StudentAlert) {
@@ -71,15 +36,16 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
     const absenceLogs = await fetchStudentAbsenceLogs(alert.nis);
 
     // 2. Format tanggal & nomor surat
-    const now = new Date();
+    const now = new Date(`${todayWib()}T12:00:00+07:00`);
     const romanMonths = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
-    const currentMonthRoman = romanMonths[now.getMonth()];
-    const currentYear = now.getFullYear();
+    const currentMonthRoman = romanMonths[Number(todayWib().slice(5, 7)) - 1];
+    const currentYear = Number(todayWib().slice(0, 4));
 
     const formattedDate = new Intl.DateTimeFormat("id-ID", {
       day: "numeric",
       month: "long",
-      year: "numeric"
+      year: "numeric",
+      timeZone: "Asia/Jakarta"
     }).format(now);
 
     const nomorSurat = `421.5/${alert.nis.slice(-3) || "001"}/SMK-GM1/BK/${currentMonthRoman}/${currentYear}`;
@@ -108,14 +74,14 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
         absenceRowsXml += `
         <w:tr>
           <w:tc><w:tcPr><w:tcW w:w="800" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="20"/></w:rPr><w:t>${index + 1}</w:t></w:r></w:p></w:tc>
-          <w:tc><w:tcPr><w:tcW w:w="4200" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="20"/></w:rPr><w:t>${item.tanggal}</w:t></w:r></w:p></w:tc>
-          <w:tc><w:tcPr><w:tcW w:w="3800" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="20"/></w:rPr><w:t>${item.status}</w:t></w:r></w:p></w:tc>
+          <w:tc><w:tcPr><w:tcW w:w="4200" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(item.tanggal)}</w:t></w:r></w:p></w:tc>
+          <w:tc><w:tcPr><w:tcW w:w="3800" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="20"/></w:rPr><w:t>${escapeXml(item.status)}</w:t></w:r></w:p></w:tc>
         </w:tr>`;
       });
     } else {
       absenceRowsXml = `
       <w:tr>
-        <w:tc><w:tcPr><w:gridSpan w:val="3"/><w:tcW w:w="8800" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:i/><w:sz w:val="20"/></w:rPr><w:t>Total ketidakhadiran tercatat: ${alert.totalHariAbsen} hari.</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:gridSpan w:val="3"/><w:tcW w:w="8800" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:i/><w:sz w:val="20"/></w:rPr><w:t>Total ketidakhadiran tercatat: ${escapeXml(alert.totalHariAbsen)} hari.</w:t></w:r></w:p></w:tc>
       </w:tr>`;
     }
 
@@ -185,7 +151,7 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
     </w:p>
     <w:p>
       <w:pPr><w:jc w:val="center"/><w:spacing w:after="220"/></w:pPr>
-      <w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Nomor: ${nomorSurat}</w:t></w:r>
+      <w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Nomor: ${escapeXml(nomorSurat)}</w:t></w:r>
     </w:p>
 
     <!-- PENGANTAR -->
@@ -215,7 +181,7 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
       <w:tr>
         <w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Waktu Pelaksanaan</w:t></w:r></w:p></w:tc>
         <w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>:</w:t></w:r></w:p></w:tc>
-        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${formattedDate} s.d. Selesai</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(formattedDate)} s.d. Selesai</w:t></w:r></w:p></w:tc>
       </w:tr>
     </w:tbl>
 
@@ -236,22 +202,22 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
       <w:tr>
         <w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Nama Siswa</w:t></w:r></w:p></w:tc>
         <w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>:</w:t></w:r></w:p></w:tc>
-        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>${alert.nama}</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(alert.nama)}</w:t></w:r></w:p></w:tc>
       </w:tr>
       <w:tr>
         <w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>NIS</w:t></w:r></w:p></w:tc>
         <w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>:</w:t></w:r></w:p></w:tc>
-        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${alert.nis}</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(alert.nis)}</w:t></w:r></w:p></w:tc>
       </w:tr>
       <w:tr>
         <w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Kelas</w:t></w:r></w:p></w:tc>
         <w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>:</w:t></w:r></w:p></w:tc>
-        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${alert.kelas}</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(alert.kelas)}</w:t></w:r></w:p></w:tc>
       </w:tr>
       <w:tr>
         <w:tc><w:tcPr><w:tcW w:w="2600" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Total Ketidakhadiran</w:t></w:r></w:p></w:tc>
         <w:tc><w:tcPr><w:tcW w:w="400" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>:</w:t></w:r></w:p></w:tc>
-        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>${alert.totalHariAbsen} Hari</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:w="5800" w:type="dxa"/></w:tcPr><w:p><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>${escapeXml(alert.totalHariAbsen)} Hari</w:t></w:r></w:p></w:tc>
       </w:tr>
     </w:tbl>
 
@@ -305,7 +271,7 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
         </w:tc>
         <w:tc>
           <w:tcPr><w:tcW w:w="4400" w:type="dxa"/></w:tcPr>
-          <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Wuryantoro, ${formattedDate}</w:t></w:r></w:p>
+          <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Wuryantoro, ${escapeXml(formattedDate)}</w:t></w:r></w:p>
           <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="22"/></w:rPr><w:t>Kepala Sekolah,</w:t></w:r></w:p>
           <w:p><w:pPr><w:spacing w:after="800"/></w:pPr></w:p>
           <w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:u w:val="single"/><w:sz w:val="22"/></w:rPr><w:t>Drs. Guruh Sarang Murtiyoso, S.Pd., M.M.</w:t></w:r></w:p>
@@ -389,8 +355,8 @@ export async function generateSuratTugasDocx(alert: StudentAlert) {
     window.URL.revokeObjectURL(url);
 
     toast.success(`Surat Tugas (.docx) untuk ${alert.nama} berhasil diunduh!`, { id: toastId });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error generating .docx", error);
-    toast.error(`Gagal membuat surat tugas: ${error.message || error}`, { id: toastId });
+    toast.error(`Gagal membuat surat tugas: ${error instanceof Error ? error.message : String(error)}`, { id: toastId });
   }
 }

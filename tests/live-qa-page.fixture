@@ -1,0 +1,8 @@
+"use client";
+import { useState } from 'react';
+import { gasPost, gasGet } from '@/lib/api';
+export default function QaTestPage(){
+ const [result,setResult]=useState(''),[busy,setBusy]=useState(false);
+ if(process.env.NODE_ENV!=='development')return null;
+ return <main className="p-6 space-y-4"><h1>QA spreadsheet TEST</h1>{['profile','regression','formats','retry','multiclass'].map(suite=><button className="block border p-3" disabled={busy} key={suite} onClick={async()=>{setBusy(true);setResult('RUNNING '+suite);try{setResult(JSON.stringify(await gasPost('runTestSuite',{suite})));}catch(e){setResult(String(e));}finally{setBusy(false);}}}>{suite}</button>)}<div>{['profile','regression','formats','retry','multiclass'].map(suite=><button className="border p-2" key={suite} onClick={async()=>setResult(JSON.stringify(await gasGet('getQaResult',{suite})))}>status {suite}</button>)}</div><pre className="whitespace-pre-wrap">{result}</pre></main>;
+}
