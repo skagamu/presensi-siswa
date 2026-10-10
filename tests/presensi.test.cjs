@@ -32,20 +32,27 @@ function find(node,predicate){if(!node||typeof node!=='object')return;if(predica
 function hasText(node,text){if(node===text)return true;if(!node||typeof node!=='object')return false;return [node.props?.children].flat(Infinity).some(child=>hasText(child,text));}
 const saveButton=()=>find(tree,n=>n.type==='Button'&&n.props.size==='lg');
 const dateInput=()=>find(tree,n=>n.type==='input'&&n.props.type==='date');
+const removeProof=()=>find(tree,n=>n.type==='button'&&n.props['aria-label']==='Hapus bukti Ani');
 (async()=>{
  render();await settle();assert.equal(calls.length,1);assert.equal(saveButton().props.disabled,true);
  calls[0].resolve({status:'success',data:[{nis:'001',kelas:'X A',tanggal:'2026-10-07',status_presensi:'SAKIT',ada_surat_dokter:true,link_bukti_izin:'https://private/bukti'}]});await settle();
  assert.equal(saveButton().props.disabled,false);await saveButton().props.onClick();await settle();
  assert.equal(saves.length,1);assert.equal(saves[0].rows[0].status_presensi,'SAKIT');assert.equal(saves[0].rows[0].link_bukti_izin,'https://private/bukti');assert.equal(saves[0].rows[0].fileName,undefined);assert(!JSON.stringify(saves[0].rows[0]).includes('fileName'));
+ states[8] = {'001':{fileName:'proof.pdf',fileBase64:'JVBERi0xLjQK',adaSuratDokter:true}};
+ render();
+ saveResponses.push({status:'success',data:{uploadedLinks:[{nis:'001',linkBukti:'https://drive.google.com/file/d/new-proof/view'}]}});
+ await saveButton().props.onClick();await settle();assert.equal(saves[1].rows[0].fileBase64,'JVBERi0xLjQK');assert.equal(states[8]['001'].fileBase64,undefined);assert.equal(states[8]['001'].linkBukti,'https://drive.google.com/file/d/new-proof/view');
+ await saveButton().props.onClick();assert.equal(saves[2].rows[0].fileBase64,undefined);assert.equal(saves[2].rows[0].link_bukti_izin,'https://drive.google.com/file/d/new-proof/view');
+ assert(removeProof());removeProof().props.onClick();await settle();await saveButton().props.onClick();assert.equal(saves[3].rows[0].link_bukti_izin,'');
  dateInput().props.onChange({target:{value:'2026-10-08'}});render();assert.equal(saveButton().props.disabled,true);await settle();
  dateInput().props.onChange({target:{value:'2026-10-09'}});await settle();
  calls[1].resolve({status:'success',data:[{nis:'001',kelas:'X A',tanggal:'2026-10-08',status_presensi:'ALPHA'}]});await settle();assert.equal(saveButton().props.disabled,true);
- calls[2].resolve({status:'success',data:[]});await settle();await saveButton().props.onClick();assert.equal(saves[1].date,'2026-10-09');assert.equal(saves[1].rows[0].status_presensi,'HADIR');
+ calls[2].resolve({status:'success',data:[]});await settle();await saveButton().props.onClick();assert.equal(saves[4].date,'2026-10-09');assert.equal(saves[4].rows[0].status_presensi,'HADIR');
  await settle();dateInput().props.onChange({target:{value:'2026-10-10'}});await settle();assert.equal(saveButton().props.disabled,true);assert.equal(calls.length,3);assert(!hasText(tree,'Ani'));assert(hasText(tree,'Hari Sabtu tidak dapat input absen. Pilih tanggal Senin–Jumat.'));
  dateInput().props.onChange({target:{value:'2026-10-12'}});await settle();calls[3].resolve({status:'error',message:'offline'});await settle();assert.equal(saveButton().props.disabled,true);
  dateInput().props.onChange({target:{value:'2026-10-13'}});await settle();calls[4].resolve({status:'success',data:[]});await settle();
  saveResponses.push({status:'error',message:'offline'});await saveButton().props.onClick();await settle();assert.equal(saveButton().props.disabled,false);
- saveResponses.push({status:'success'});await saveButton().props.onClick();await settle();assert.equal(saves.length,4);assert.deepEqual(saves[2],saves[3]);
+ saveResponses.push({status:'success'});await saveButton().props.onClick();await settle();assert.equal(saves.length,7);assert.deepEqual(saves[5],saves[6]);
  console.log('Presensi: saved status, preserved attachment, stale requests, weekend blocking, offline recovery and idempotent UI retry passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 const docxCtx={exports:{},require:name=>name==='@/lib/api'?{}:name==='@/lib/date'?{}:name==='sonner'?{toast:{}}:{default:function(){}}};

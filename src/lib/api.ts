@@ -179,7 +179,7 @@ export const login = (username: string, password: string) =>
 export const saveAttendance = (
   date: string,
   attendances: Partial<LogPresensi>[]
-) => gasPost("saveAttendance", { date, attendances });
+) => gasPost<{ alertSyncPending?: boolean; uploadedLinks?: { nis: string; linkBukti: string }[] }>("saveAttendance", { date, attendances });
 
 export const resolveCase = (payload: {
   id_peringatan: string;
@@ -195,6 +195,7 @@ export const resolveCase = (payload: {
 export const saveBankKasus = (payload: {
   date: string;
   pelanggaran: string;
+  request_id: string;
   students: { nis: string; nama: string; kelas: string }[];
 }) => gasPost("saveBankKasus", payload);
 

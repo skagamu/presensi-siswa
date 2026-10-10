@@ -18,13 +18,14 @@ function render(){si=ri=ei=0;tree=ctx.exports.default();const pending=jobs;jobs=
 async function settle(){for(let i=0;i<5;i++){await Promise.resolve();render();}}
 function find(node,p){if(!node||typeof node!=='object')return;if(p(node))return node;for(const child of [node.props?.children].flat(Infinity)){const found=find(child,p);if(found)return found;}}
 const detailButton=()=>find(tree,n=>n.type==='Button'&&n.props.children?.includes?.('Detail'));
+const mobileDetailButton=()=>find(tree,n=>n.type==='Button'&&n.props['aria-label']==='Lihat detail Ani');
 const refresh=()=>find(tree,n=>n.type==='Button'&&n.props.children?.includes?.('Segarkan Data'));
 const modal=()=>find(tree,n=>n.type==='SiswaDetailModal');
 const loadingDialog=()=>find(tree,n=>n.type==='Dialog');
 const payload={status:'success',data:{students:summary,logs:[{nis:'001',tanggal:'2026-10-07',status_presensi:'SAKIT',ada_surat_dokter:true,link_bukti_izin:'proof'}],kasus:[],penyelesaian:[]}};
 (async()=>{
  render();await settle();assert.equal(summaries,1);assert.equal(details.length,0);assert.equal(modal().props.isOpen,false);
- const click=detailButton().props.onClick;const first=click({stopPropagation(){}});await settle();assert.equal(details.length,1);assert.equal(details[0].nis,'001');assert.equal(detailButton().props.disabled,true);await click({stopPropagation(){}});assert.equal(details.length,1);
+ const mobileButton=mobileDetailButton();assert(mobileButton);assert.equal(mobileButton.props.disabled,false);const click=mobileButton.props.onClick;const first=click();await settle();assert.equal(details.length,1);assert.equal(details[0].nis,'001');assert.equal(mobileDetailButton().props.disabled,true);await click();assert.equal(details.length,1);
  assert.equal(loadingDialog().props.open,true);
  const overlay=find(tree,n=>n.type==='DialogContent');assert.equal(overlay.props['aria-busy'],true);
  let blocked=0;overlay.props.onEscapeKeyDown({preventDefault(){blocked++;}});overlay.props.onInteractOutside({preventDefault(){blocked++;}});assert.equal(blocked,2);

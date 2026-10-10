@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,6 +31,7 @@ export default function BankKasusInputPage() {
   const [pelanggaran, setPelanggaran] = useState<string>("");
   const [selectedNis, setSelectedNis] = useState<string[]>([]);
   const [searchSiswaGlobal, setSearchSiswaGlobal] = useState<string>("");
+  const requestIds = useRef(new Map<string, string>());
 
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -101,14 +102,19 @@ export default function BankKasusInputPage() {
     setIsSaving(true);
     const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
     const selectedStudentsData = pool.filter((s) => selectedNis.includes(s.nis));
+    const requestKey = JSON.stringify([tanggal, pelanggaran.trim(), selectedStudentsData.map(s => s.nis).sort()]);
+    const requestIdsByPayload = requestIds.current;
+    if (!requestIdsByPayload.has(requestKey)) requestIdsByPayload.set(requestKey, crypto.randomUUID());
 
     try {
       const res = await saveBankKasus({
         date: tanggal,
         pelanggaran: pelanggaran.trim(),
+        request_id: requestIdsByPayload.get(requestKey)!,
         students: selectedStudentsData,
       });
       if (res.status === "success") {
+        requestIdsByPayload.delete(requestKey);
         toast.success(`${selectedStudentsData.length} data pelanggaran berhasil disimpan!`);
         setPelanggaran("");
         setSelectedNis([]);

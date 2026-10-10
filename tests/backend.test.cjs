@@ -23,7 +23,7 @@ let uploads = 0,
   lastFolder,
   nextFileId = 1;
 const driveFiles = new Map();
-const props = {}, cache = {};
+const props = { SPREADSHEET_ID: 'TEST_SHEET' }, cache = {};
 const sheet = name => ({
   getDataRange: () => ({
     getValues: () => tables[name].map(r => [...r])
@@ -107,21 +107,25 @@ const ctx = vm.createContext({
       return {
         hasNext: () => true,
         next: () => ({
+          getId: () => name,
           createFile: blob => {
             if (failUpload || failNthUpload && --failNthUpload === 0) throw Error('offline');
             uploads++;
             const id = String(nextFileId++);
-            driveFiles.set(id, { url: `https://private/${id}`, trashed: false, name: blob.n });
+            driveFiles.set(id, { url: `https://drive.google.com/file/d/${id}/view`, trashed: false, name: blob.n, parentId: name });
             return {
               getId: () => id,
-              getUrl: () => `https://private/${id}`
+              getUrl: () => `https://drive.google.com/file/d/${id}/view`
             };
           }
         })
       };
     }
     ,
-    getFileById: id => ({ setTrashed: value => { const file = driveFiles.get(id); if (file) file.trashed = value; } })
+    getFileById: id => ({
+      getParents: () => { let hasParent = true; return { hasNext: () => hasParent, next: () => { hasParent = false; return { getId: () => driveFiles.get(id)?.parentId }; } }; },
+      setTrashed: value => { const file = driveFiles.get(id); if (file) file.trashed = value; }
+    })
   },
   ContentService: {
     MimeType: {
@@ -171,6 +175,14 @@ test('login creates random server session and migrates plaintext', () => {
     token
   }).status, 'success');
 });
+test('missing spreadsheet configuration fails closed', () => {
+  const current = props.SPREADSHEET_ID;
+  delete props.SPREADSHEET_ID;
+  const response = call('getStudents', { token });
+  props.SPREADSHEET_ID = current;
+  assert.equal(response.status, 'error');
+  assert.match(response.message, /SPREADSHEET_ID/);
+});
 const save = (date, status = 'SAKIT', extra = {}) => call('saveAttendance', {
   token,
   date,
@@ -202,7 +214,13 @@ test('uploads once and preserves attachment on repeat', () => {
   }).status, 'success');
   assert.equal(uploads, 1);
   save('2026-10-07');
-  assert.equal(tables.LogPresensi.find(r => r[1] === '2026-10-07')[7], 'https://private/1');
+  const link = tables.LogPresensi.find(r => r[1] === '2026-10-07')[7];
+  assert.equal(link, 'https://drive.google.com/file/d/1/view');
+  assert.equal(save('2026-10-07', 'SAKIT', { link_bukti_izin: 'https://attacker.example/file' }).status, 'error');
+  assert.equal(tables.LogPresensi.find(r => r[1] === '2026-10-07')[7], link);
+  assert.equal(save('2026-10-07', 'SAKIT', { link_bukti_izin: '' }).status, 'success');
+  assert.equal(tables.LogPresensi.find(r => r[1] === '2026-10-07')[7], '');
+  assert.equal(driveFiles.get('1').trashed, true);
 });
 test('logs schema and NIS filter use actual columns', () => {
   const r = call('getLogPresensi', {
@@ -274,8 +292,10 @@ test('resolve validates alert and file before closing', () => {
     id_peringatan: id,
     nis: '001',
     fileName: 'a.pdf',
-    fileBase64: 'JVBERi0xLjQK'
+    fileBase64: 'JVBERi0xLjQK',
+    catatan_konseling: '=HYPERLINK("https://bad")'
   }, true).status, 'success');
+  assert.equal(tables.PenyelesaianKasus.at(-1)[6], "'=HYPERLINK(\"https://bad\")");
   assert.equal(call('getPenyelesaianKasus', {
     token,
     nis: '001'
@@ -430,6 +450,32 @@ test('failed logins throttle valid password after ten failures', () => {
   cache['LOGIN_admin'] = null;
   token = call('login', { username: 'admin', password: 'secret' }, true).data.token;
 });
+test('attendance reports committed logs when alert reconciliation fails and retry repairs it', () => {
+  resetBackendFixture();
+  seedActiveAlert();
+  failAlertWrite = true;
+  const first = save('2026-10-08');
+  failAlertWrite = false;
+  assert.equal(first.status, 'success');
+  assert.equal(first.data.alertSyncPending, true);
+  assert.match(first.message, /Presensi tersimpan/);
+  assert.equal(tables.LogPresensi.filter(r => r[1] === '2026-10-08').length, 1);
+  const retry = save('2026-10-08');
+  assert.equal(retry.data.alertSyncPending, false);
+  assert.equal(tables.LogPresensi.filter(r => r[1] === '2026-10-08').length, 1);
+});
+test('bank case retry is idempotent and user text is stored as literal text', () => {
+  resetBackendFixture();
+  const payload = { token, date: '2026-10-08', pelanggaran: '=IMPORTXML("https://bad")', request_id: 'stable-request-1', students: [{ nis: '001', kelas: 'X A' }] };
+  const first = call('saveBankKasus', payload, true);
+  assert.equal(first.status, 'success');
+  assert.equal(tables.BankKasus.length, 2);
+  assert.equal(tables.BankKasus[0][7], 'request_id');
+  assert.equal(tables.BankKasus[1][5], "'=IMPORTXML(\"https://bad\")");
+  assert.equal(tables.BankKasus[1][7], payload.request_id);
+  assert.equal(call('saveBankKasus', payload, true).status, 'success');
+  assert.equal(tables.BankKasus.length, 2);
+});
 test('alerts update cumulative count and current priority excludes retrospective prior years', () => {
   resetBackendFixture();
   for (const date of ['2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15']) {
@@ -508,7 +554,7 @@ function resetBackendFixture() {
   for (const name of Object.keys(tables)) tables[name] = initialTables[name].map(row => [...row]);
   for (const key of Object.keys(props)) delete props[key];
   for (const key of Object.keys(cache)) delete cache[key];
-  props.AUTH_SALT = 'transaction-test-salt';
+  props.AUTH_SALT = 'transaction-test-salt'; props.SPREADSHEET_ID = 'TEST_SHEET';
   uploads = 0; failUpload = false; failLogWrite = false; failAlertWrite = false;
   failResolutionArchive = false; failNthUpload = 0; locked = false; lastFolder = undefined;
   nextFileId = 1; driveFiles.clear();
@@ -593,6 +639,7 @@ test('directory cache is scoped, authorized, bypassable and invalidated on write
   assert.equal(save('2026-10-07','SAKIT').status,'success');
   const after=call('getStudentDirectory',params);assert.equal(after.profile.cache,'miss');assert.equal(after.data.students[0].totalSakit,1);
   props.SPREADSHEET_ID='OTHER_DATABASE';assert.equal(call('getStudentDirectory',params).profile.cache,'miss');delete props.SPREADSHEET_ID;
+  assert.equal(call('getStudentDirectory',params).status,'error');props.SPREADSHEET_ID='TEST_SHEET';
   const keys=Object.keys(cache).filter(k=>k.startsWith('DIRECTORY_'));keys.forEach(k=>delete cache[k]);assert.equal(call('getStudentDirectory',params).profile.cache,'miss');
 });
 if (failed) process.exitCode = 1;

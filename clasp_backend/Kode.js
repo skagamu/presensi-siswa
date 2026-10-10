@@ -173,11 +173,20 @@ const AuthController = {
   login(p) {
     if (!p.username || !p.password || String(p.username).length > 100) throw Error('Username dan password diperlukan.');
     const attemptCache = CacheService.getScriptCache(),
-      attemptKey = 'LOGIN_' + String(p.username).trim().toLowerCase(),
-      attempts = Number(attemptCache.get(attemptKey) || 0);
+      attemptKey = 'LOGIN_' + String(p.username).trim().toLowerCase();
+    let attempts;
+    const attemptLock = LockService.getScriptLock();
+    attemptLock.waitLock(30000);
+    try { attempts = Number(attemptCache.get(attemptKey) || 0); }
+    finally { attemptLock.releaseLock(); }
     if (attempts >= 10) throw Error('Terlalu banyak percobaan login. Coba lagi setelah 15 menit.');
     const invalid = () => {
-      attemptCache.put(attemptKey, String(attempts + 1), 900);
+      attemptLock.waitLock(30000);
+      try {
+        const current = Number(attemptCache.get(attemptKey) || 0);
+        if (current >= 10) throw Error('Terlalu banyak percobaan login. Coba lagi setelah 15 menit.');
+        attemptCache.put(attemptKey, String(current + 1), 900);
+      } finally { attemptLock.releaseLock(); }
       throw Error('Username atau password salah.');
     };
     const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.USERS),
@@ -283,8 +292,13 @@ const RequestProfile = {
 };
 const SpreadsheetRepository = {
   spreadsheet: null,
+  literalText(value) {
+    const text = String(value);
+    return /^[\s]*[=+\-@]/.test(text) ? "'" + text : text;
+  },
   getSheet(name) {
-    const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID') || '1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY';
+    const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+    if (!id) throw Error('SPREADSHEET_ID belum dikonfigurasi. Operasi dihentikan demi keamanan.');
     if (!this.spreadsheet) this.spreadsheet = RequestProfile.measure('openSpreadsheetMs', () => SpreadsheetApp.openById(id));
     const sheet = RequestProfile.measure('sheetLookupMs', () => this.spreadsheet.getSheetByName(name));
     if (!sheet) throw Error('Tab Sheet ' + name + ' tidak ditemukan.');
@@ -367,8 +381,10 @@ const SpreadsheetRepository = {
 const DirectoryCache = {
   key(p) {
     const props = PropertiesService.getScriptProperties();
+    const spreadsheetId = props.getProperty('SPREADSHEET_ID');
+    if (!spreadsheetId) throw Error('SPREADSHEET_ID belum dikonfigurasi. Operasi dihentikan demi keamanan.');
     const fields = ['summary', 'nis', 'tingkat', 'academic_year', 'date', 'kelas', 'start_date', 'end_date'].map(k => [k, p[k] || '']);
-    const fingerprint = JSON.stringify([props.getProperty('SPREADSHEET_ID') || 'default', props.getProperty('DIRECTORY_REVISION') || '0', fields]);
+    const fingerprint = JSON.stringify([spreadsheetId, props.getProperty('DIRECTORY_REVISION') || '0', fields]);
     return 'DIRECTORY_' + Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, fingerprint).map(b => (b & 255).toString(16).padStart(2, '0')).join('');
   },
   get(key, fresh) {
@@ -459,15 +475,20 @@ const AttendanceController = {
     try {
       const updated = students.filter(s => s.status_presensi !== 'HADIR').map(s => {
         const old = existing.get(s.nis),
-          file = s.fileBase64 ? FileService.uploadFile(s.fileBase64, s.fileName, 'BK_Bukti_Izin') : null,
-          link = file ? (uploaded.push(file), file.url) : old && old[7] || '';
+          file = s.fileBase64 ? FileService.uploadFile(s.fileBase64, s.fileName, 'BK_Bukti_Izin') : null;
+        if (!file && s.link_bukti_izin && s.link_bukti_izin !== String(old && old[7] || '')) throw Error('Tautan bukti tidak cocok dengan data tersimpan.');
+        const link = file ? (uploaded.push(file), file.url) : s.link_bukti_izin === undefined ? old && old[7] || '' : String(s.link_bukti_izin || '');
         links.push({
           nis: s.nis,
-          debugLink: link
+          linkBukti: link
         });
         return [old ? old[0] : 'ATT-' + Utilities.getUuid(), date, s.nis, s.nama, s.kelas, s.status_presensi, s.ada_surat_dokter === undefined ? Boolean(old && old[6]) : Boolean(s.ada_surat_dokter), link, timestamp];
       });
-    const pending = new Map(updated.map(r => [String(r[2]), r]));
+    const pending = new Map(updated.map(r => [String(r[2]), r])),
+      releasedLinks = students.map(s => {
+        const old = existing.get(s.nis), next = pending.get(s.nis);
+        return old && old[7] && (!next || old[7] !== next[7]) ? old[7] : '';
+      }).filter(Boolean);
     const result = [rows[0]];
     for (const row of rows.slice(1)) {
       if (!row[2]) continue;
@@ -479,10 +500,13 @@ const AttendanceController = {
     }
     result.push(...pending.values());
       SpreadsheetRepository.replace(sheet, result, 9, rows);
-      AlertService.reconcile(students, result.slice(1), date, timestamp);
-      return ResponseHelper.success({
-        uploadedLinks: links
-      }, 'Presensi berhasil disimpan.');
+      let alertSyncPending = false;
+      try { AlertService.reconcile(students, result.slice(1), date, timestamp); }
+      catch (error) { alertSyncPending = true; console.error('Presensi tersimpan, sinkronisasi alert gagal: ' + error.message); }
+      FileService.cleanupManagedLinks(releasedLinks, [CONFIG.SHEETS.LOG_PRESENSI, CONFIG.SHEETS.PENYELESAIAN_KASUS], 'BK_Bukti_Izin');
+      return ResponseHelper.success({ uploadedLinks: links, alertSyncPending }, alertSyncPending
+        ? 'Presensi tersimpan, tetapi sinkronisasi alert belum berhasil. Simpan ulang untuk mencoba lagi.'
+        : 'Presensi berhasil disimpan.');
     } catch (error) {
       FileService.cleanupUnreferenced(uploaded, [CONFIG.SHEETS.LOG_PRESENSI, CONFIG.SHEETS.PENYELESAIAN_KASUS]);
       throw error;
@@ -584,12 +608,17 @@ const BankKasusController = {
     const date = TimeHelper.valid(p.date || TimeHelper.getCurrentDate()),
       pupils = new Map(SpreadsheetRepository.students().map(s => [s.nis, s]));
     if (typeof p.pelanggaran !== 'string' || !p.pelanggaran.trim() || !Array.isArray(p.students) || !p.students.length) throw Error('Data kosong.');
+    if (p.request_id && (typeof p.request_id !== 'string' || p.request_id.length > 100)) throw Error('ID permintaan tidak valid.');
+    const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.BANK_KASUS),
+      existing = sheet.getDataRange().getValues();
+    if (p.request_id && existing.some(row => row[7] === p.request_id)) return ResponseHelper.success(null, 'Data sudah tersimpan.');
+    if (p.request_id && existing[0]?.[7] !== 'request_id') sheet.getRange(1, 8).setValue('request_id');
     const seen = new Set(),
       rows = p.students.map(s => {
         const pupil = pupils.get(String(s.nis));
         if (!pupil || seen.has(pupil.nis) || s.kelas && s.kelas !== pupil.kelas) throw Error('Siswa tidak valid.');
         seen.add(pupil.nis);
-        return ['BK-' + Utilities.getUuid(), date, pupil.nis, pupil.nama, pupil.kelas, p.pelanggaran.trim(), TimeHelper.getCurrentTimestamp()];
+        return ['BK-' + Utilities.getUuid(), date, pupil.nis, pupil.nama, pupil.kelas, SpreadsheetRepository.literalText(p.pelanggaran.trim()), TimeHelper.getCurrentTimestamp(), p.request_id || ''];
       });
     SpreadsheetRepository.insertBatch(CONFIG.SHEETS.BANK_KASUS, rows);
     return ResponseHelper.success(null, 'Data berhasil disimpan.');
@@ -642,7 +671,7 @@ const CaseController = {
       const file = FileService.uploadFile(p.fileBase64 || p.pdfBase64, p.fileName, 'BK_Penyelesaian_Kasus');
       link = file.url;
       try {
-        SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PENYELESAIAN_KASUS, [['RES-' + Utilities.getUuid(), r[0], r[1], r[2], r[3], link, String(p.catatan_konseling || ''), String(AuthController.session(p.token).user.nama), TimeHelper.getCurrentTimestamp()]]);
+        SpreadsheetRepository.insertBatch(CONFIG.SHEETS.PENYELESAIAN_KASUS, [['RES-' + Utilities.getUuid(), r[0], r[1], r[2], r[3], link, SpreadsheetRepository.literalText(p.catatan_konseling || ''), String(AuthController.session(p.token).user.nama), TimeHelper.getCurrentTimestamp()]]);
       } catch (error) {
         FileService.cleanupUnreferenced([file], [CONFIG.SHEETS.PENYELESAIAN_KASUS]);
         throw error;
@@ -705,6 +734,24 @@ const FileService = {
       try { DriveApp.getFileById(file.id).setTrashed(true); }
       catch (error) { console.error('Could not trash unreferenced upload ' + file.id + ': ' + error.message); }
     }
+  },
+  cleanupManagedLinks(urls, sheetNames, folder) {
+    const files = [];
+    for (const url of urls) {
+      const match = /^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)/.exec(String(url));
+      if (!match) continue;
+      try {
+        const driveFile = DriveApp.getFileById(match[1]),
+          folderName = (PropertiesService.getScriptProperties().getProperty('FILE_FOLDER_PREFIX') || '') + folder,
+          folders = DriveApp.getFoldersByName(folderName);
+        if (!folders.hasNext()) continue;
+        const folderId = folders.next().getId(), parents = driveFile.getParents();
+        let managed = false;
+        while (parents.hasNext()) if (parents.next().getId() === folderId) managed = true;
+        if (managed) files.push({ id: match[1], url });
+      } catch (error) { console.warn('Attachment cleanup skipped: ' + error.message); }
+    }
+    this.cleanupUnreferenced(files, sheetNames);
   }
 };
 const ResponseHelper = {

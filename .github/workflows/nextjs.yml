@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
       - name: Typecheck and regressions
-        run: npm run typecheck && npm test
+        run: npm run typecheck && npm test && npm run lint
       - name: Build with Next.js
         run: npm run build
       - name: Upload artifact

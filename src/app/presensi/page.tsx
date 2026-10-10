@@ -137,7 +137,16 @@ export default function PresensiHarianPage() {
     try {
       const res = await saveAttendance(tanggal, dataKirim);
       if (res.status !== "success") throw new Error(res.message || "Gagal menyimpan presensi.");
-      toast.success(`Presensi Kelas ${kelas} tanggal ${tanggal} disimpan!`);
+      setLampiranSiswa(prev => {
+        const next = { ...prev };
+        for (const { nis, linkBukti } of res.data?.uploadedLinks || []) {
+          const current = next[nis];
+          if (current && linkBukti) next[nis] = { ...current, fileName: current.fileBase64 ? current.fileName : "Bukti tersimpan", fileBase64: undefined, linkBukti };
+        }
+        return next;
+      });
+      if (res.data?.alertSyncPending) toast.warning(res.message || "Presensi tersimpan, sinkronisasi alert belum berhasil. Simpan ulang untuk mencoba lagi.");
+      else toast.success(`Presensi Kelas ${kelas} tanggal ${tanggal} disimpan!`);
     } catch {
       toast.error("Gagal mengirim presensi.");
     } finally {
@@ -339,7 +348,7 @@ export default function PresensiHarianPage() {
                   {lampiran && (
                     <div className="flex items-center justify-between text-[11px] bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-100">
                       <span className="truncate max-w-[200px]">{lampiran.fileName} {lampiran.adaSuratDokter ? "(Surat Dokter)" : ""}</span>
-                      <button onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
+                      <button aria-label={`Hapus bukti ${siswa.nama}`} onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -409,7 +418,7 @@ export default function PresensiHarianPage() {
                             <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-md text-xs">
                               <FileCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span className="truncate max-w-[90px] font-medium" title={lampiran.fileName}>{lampiran.fileName}</span>
-                              <button onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
+                              <button aria-label={`Hapus bukti ${siswa.nama}`} onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>

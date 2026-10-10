@@ -236,8 +236,7 @@ export default function DataSiswaPage() {
             filteredStudents.map((s) => (
               <div
                 key={s.nis}
-                onClick={() => handleOpenDetail(s)}
-                className="p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors space-y-2"
+                className="p-4 hover:bg-gray-50 transition-colors space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -246,7 +245,7 @@ export default function DataSiswaPage() {
                       NIS: <span className="font-mono">{s.nis}</span> • <span className="font-bold text-gray-800">{s.kelas}</span>
                     </p>
                   </div>
-                  <Button disabled={loadingDetail} variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-gray-400">
+                  <Button aria-label={`Lihat detail ${s.nama}`} onClick={() => handleOpenDetail(s)} disabled={loadingDetail} variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-gray-400">
                     <Eye className="w-4 h-4" />
                   </Button>
                 </div>
