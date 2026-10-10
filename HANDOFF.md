@@ -38,7 +38,7 @@ Jangan menjalankan next start untuk static export; dev memakai next dev. Untuk p
 - Apps Script TEST: `1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH`.
 - Editor: https://script.google.com/home/projects/1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH/edit
 - Deployment ID: `AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q`.
-- Versi terakhir: **6**, penghapusan portal orang tua.
+- Versi TEST aktif: **13**, perbaikan target spreadsheet aman, lampiran presensi, dan retry kasus.
 - Endpoint: https://script.google.com/macros/s/AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q/exec
 - Source backend: `clasp_backend/Kode.js`. **clasp_backend/.clasp.json mengarah ke script lama/produksi**, jangan push dari direktori itu untuk pekerjaan TEST.
 - Konfigurasi staging TEST permanen: `handoff/gas-test/.clasp.json` dan `appsscript.json`. Source backend/runner tidak diduplikasi di sana. Buat staging lalu salin versi terbaru:
@@ -75,6 +75,7 @@ Session server, hash password, expiry/logout/throttle; endpoint setup publik dih
 
 ## Bukti verifikasi dan batasnya
 - Pembaruan 10 Okt 12:40 WIB: Google TEST regression PASS 23, retry sesudah respons hilang PASS tanpa duplikasi, konkurensi 3 kelas/3 sesi/6 request PASS (3 log akhir), dan format bukti PASS 7. QA runner sementara sudah dihapus; TEST kembali ke backend bersih v12. Produksi tetap versi 29.
+- Pembaruan 10 Okt 16:45 WIB: GAS TEST deployment v13 berisi source perbaikan dan runner `runCopyRegression`, `runCopyConcurrencyRegression`, dan lainnya. `clasp run` gagal dengan `NOT_FOUND`, jadi runner live v13 belum dijalankan; jalankan dari editor Apps Script TEST. Local regressions, typecheck, lint, dan static build lulus. Produksi tetap versi 29.
 - Profil UI roster nyata 467 siswa: summary dingin 4.063ms/5 pembacaan Sheets; detail dingin 3.895ms/4 pembacaan; detail hangat 1.499ms/0 pembacaan; paint dingin 4.267ms dan hangat 1.910ms. Latensi dingin masih terasa; hanya satu siswa/satu sesi.
 - Backup baca-saja produksi terverifikasi 16 sheet, SHA-256 ada di TEST-RESULTS.md, di folder privat Documents; source GAS production v29 tersimpan di sampingnya. Tidak ada write produksi.
 - Validasi final: 7/7 suite Node, typecheck, static build 10 rute lulus; lint 0 error/14 warning.
@@ -95,5 +96,6 @@ Session server, hash password, expiry/logout/throttle; endpoint setup publik dih
 3. Performa cold load masih 3.9–4.1 detik pada satu sampel live; cache warm detail ~1.5 detik. Perlu dipantau sesudah rilis, tidak ada janji SLA.
 4. Offline diuji dengan fault fetch dalam unit test, bukan dengan memutus jaringan di browser. Audit menyisakan 10 temuan di toolchain development; runtime produksi bersih.
 5. Rilis produksi harus pasangan frontend/backend, dengan izin akhir pengguna. Tidak ada perubahan spreadsheet atau deployment produksi dari pekerjaan ini.
+6. Sebelum GAS dikirim ke produksi, pastikan Script Property `SPREADSHEET_ID` sudah diisi dengan ID sheet produksi yang benar; backend sekarang gagal tertutup bila properti ini kosong.
 
 Tes yang sudah lulus tidak perlu dijalankan ulang kecuali file terkait berubah. Tidak ada persentase kelulusan tunggal: gerbang yang diminta sudah lulus, sementara latensi dingin dan batas simulasi offline tercatat di atas.

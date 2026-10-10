@@ -10,6 +10,7 @@ function runCopyRegression() {
   const pupilSheet = ss.getSheetByName('Siswa_X');
   if (SpreadsheetRepository.students().some(s => s.nis === nis)) throw new Error('NIS uji sudah ada; tidak mengubah datanya.');
   const token = Utilities.getUuid() + Utilities.getUuid();
+  const bankRequestId = Utilities.getUuid();
   properties.setProperty('SESSION_' + token, JSON.stringify({ user: { id: 'TEST', username: 'test', nama: 'Pengujian Salinan', role: 'ADMIN' }, expiresAt: Date.now() + 3600000 }));
   const checks = [];
   const timings = [];
@@ -64,6 +65,12 @@ function runCopyRegression() {
     check(logs.status === 'success' && logs.data.length === 5, 'Filter log harus mengembalikan lima hari.');
     const recap = read('getRekapRentang', { start_date: dates[0], end_date: dates[5], kelas: 'X UJI' });
     check(recap.status === 'success' && recap.data.some(s => s.nis === nis && s.sakit === 5), 'Rekap periode harus menghitung lima hari sakit.');
+    const bank = call('saveBankKasus', { date: dates[5], pelanggaran: '=1+1', request_id: bankRequestId, students: [{ nis, kelas: 'X UJI' }] });
+    check(bank.status === 'success', 'Simpan bank kasus harus berhasil.');
+    const bankSheet = ss.getSheetByName('BankKasus'), bankRows = bankSheet.getDataRange().getValues();
+    check(bankRows.some(row => row[7] === bankRequestId && row[5] === "'=1+1"), 'Teks formula harus disimpan sebagai literal dan ID operasi tercatat.');
+    const bankCount = bankSheet.getLastRow();
+    check(call('saveBankKasus', { date: dates[5], pelanggaran: '=1+1', request_id: bankRequestId, students: [{ nis, kelas: 'X UJI' }] }).status === 'success' && bankSheet.getLastRow() === bankCount, 'Retry bank kasus tidak boleh membuat duplikat.');
     const directory = read('getStudentDirectory', { nis });
     check(directory.status === 'success' && directory.data.students.length === 1 && directory.data.logs.length === 5, 'Detail siswa harus terbatas pada siswa uji.');
     const summaryRows = read('getStudentDirectory', { summary: 'true', nis });
@@ -78,6 +85,8 @@ function runCopyRegression() {
           const sheet = ss.getSheetByName(name), rows = sheet.getDataRange().getValues();
           for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][column]) === nis) sheet.deleteRow(i + 1);
         }
+        const bankSheet = ss.getSheetByName('BankKasus'), bankRows = bankSheet.getDataRange().getValues();
+        for (let i = bankRows.length - 1; i >= 1; i--) if (bankRows[i][7] === bankRequestId) bankSheet.deleteRow(i + 1);
       } finally { lock.releaseLock(); }
     }
     properties.deleteProperty('SESSION_' + token);
@@ -164,6 +173,7 @@ function runCopyConcurrencyRegression() {
   CacheService.getScriptCache().put('SESSION_' + token, serialized, 3600);
   let inserted = false;
   let summary;
+  const loginAttemptKey = 'LOGIN_codex-concurrency-test';
   try {
     students.appendRow([99999, 'X UJI', nis, 'SISWA UJI CODEX', '', '', '']);
     inserted = true;
@@ -178,7 +188,13 @@ function runCopyConcurrencyRegression() {
     if (results.length !== 2 || results.some(result => result.status !== 'success')) throw new Error('Kedua request bersamaan harus berhasil.');
     const logs = SpreadsheetRepository.logs().filter(row => row.nis === nis && row.tanggal === date);
     if (logs.length !== 1 || !['SAKIT', 'IZIN'].includes(logs[0].status_presensi)) throw new Error('Request bersamaan menggandakan atau merusak log presensi.');
-    summary = { status: 'PASS', requests: results.length, finalLogCount: logs.length, finalStatus: logs[0].status_presensi, date };
+    const loginResults = UrlFetchApp.fetchAll(Array.from({ length: 20 }, () => ({
+      url: endpoint, method: 'post', contentType: 'text/plain;charset=utf-8', muteHttpExceptions: true,
+      payload: JSON.stringify({ action: 'login', username: 'codex-concurrency-test', password: 'incorrect' })
+    })));
+    const attempts = Number(CacheService.getScriptCache().get(loginAttemptKey) || 0);
+    if (loginResults.length !== 20 || attempts !== 10) throw new Error('Throttle login bersamaan kehilangan atau melebihi hitungan: ' + attempts);
+    summary = { status: 'PASS', requests: results.length, finalLogCount: logs.length, finalStatus: logs[0].status_presensi, concurrentLoginAttempts: loginResults.length, throttleCount: attempts, date };
   } finally {
     const lock = LockService.getScriptLock(); lock.waitLock(30000);
     try {
@@ -189,6 +205,7 @@ function runCopyConcurrencyRegression() {
     } finally { lock.releaseLock(); }
     properties.deleteProperty('SESSION_' + token);
     CacheService.getScriptCache().remove('SESSION_' + token);
+    CacheService.getScriptCache().remove(loginAttemptKey);
   }
   console.log(JSON.stringify(summary));
   return summary;
