@@ -328,7 +328,7 @@ export default function PresensiHarianPage() {
         </div>
 
         {!schoolDay ? (
-          <div role="status" className="flex min-h-[300px] items-center justify-center p-6 pb-40 text-center text-sm text-gray-600 md:pb-6">
+          <div role="status" className="flex min-h-[300px] items-start justify-center p-6 pt-8 text-center text-sm text-gray-600 md:items-center md:pt-6">
             {new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 6
               ? "Hari Sabtu tidak dapat input absen. Pilih tanggal Senin–Jumat."
               : new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 0
