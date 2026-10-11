@@ -1,9 +1,11 @@
-import * as ExcelJS from "exceljs";
+import type * as ExcelJS from "exceljs";
+import { absenceRate } from "./reportData";
 import { saveAs } from "file-saver";
-import { ReportConfig } from "./reportImage";
+import type { ReportConfig } from "./reportImage";
 
 export async function downloadReportExcel(config: ReportConfig): Promise<void> {
-  const wb = new ExcelJS.Workbook();
+  const Excel = await import("exceljs");
+  const wb = new Excel.Workbook();
   wb.creator = "Presensi Siswa BK";
   const ws = wb.addWorksheet("Rekap Presensi");
 
@@ -41,11 +43,11 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     const titleCell = ws.getCell(`A${currentRow}`);
     titleCell.value = `PRESENSI ${tingkatLabel} ${config.bulanTahun}`.toUpperCase();
     applyStyle(titleCell, "FFBBF7D0", "FF064E3B", true, centerAlign);
-    
+
     const dCell = ws.getCell(`E${currentRow}`);
     dCell.value = `TANGGAL ${config.tanggalSingkat || ""}`;
     applyStyle(dCell, "FFF8FAFC", "FF334155", true, centerAlign);
-    
+
     ws.getRow(currentRow).height = 25;
     currentRow++;
 
@@ -62,7 +64,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     const dTitle = ws.getCell(`E${currentRow}`);
     dTitle.value = config.namaHari || "";
     applyStyle(dTitle, "FFF8FAFC", "FF000000", true, centerAlign);
-    
+
     const dSub = ws.getCell(`E${currentRow + 1}`);
     dSub.value = config.tanggalSingkat || "";
     applyStyle(dSub, "FFF8FAFC", "FF000000", true, centerAlign);
@@ -75,7 +77,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     config.items.forEach((row, i) => {
       const isEven = i % 2 === 0;
       const defaultBg = isEven ? "FFFFFFFF" : "FFFCFCFC";
-      
+
       const r = ws.getRow(currentRow);
       r.height = 20;
 
@@ -96,7 +98,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       let statColor = "FF000000";
       const st = row.statusToday || "-";
       let fullStatus = st;
-      
+
       if (st === "S") { statBg = "FFFEF08A"; statColor = "FF854D0E"; fullStatus = "Sakit"; }
       else if (st === "I") { statBg = "FF67E8F9"; statColor = "FF155E75"; fullStatus = "Izin"; }
       else if (st === "A") { statBg = "FFEF4444"; statColor = "FFFFFFFF"; fullStatus = "Alpa"; }
@@ -121,7 +123,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     ws.mergeCells(`A${currentRow}:D${currentRow}`);
     foot2.getCell(1).value = "PROSENTASE KETIDAKHADIRAN";
     applyStyle(foot2.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     foot2.getCell(5).value = percentage;
     applyStyle(foot2.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
 
@@ -249,10 +251,10 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(13).value = row.total;
       applyStyle(r.getCell(13), "FFF8FAFC", "FF0F172A", true, centerAlign);
 
-      const totalDaysMinggu = 5;
+      const totalDaysMinggu = config.schoolDays;
       const tidakHadirMinggu = row.total;
-      const pctTidakHadirMinggu = totalDaysMinggu > 0 ? tidakHadirMinggu / totalDaysMinggu : 0;
-      const pctHadirMinggu = totalDaysMinggu > 0 ? (totalDaysMinggu - tidakHadirMinggu) / totalDaysMinggu : 1;
+      const pctTidakHadirMinggu = absenceRate(tidakHadirMinggu, totalDaysMinggu);
+      const pctHadirMinggu = 1 - pctTidakHadirMinggu;
 
       const cPTH = r.getCell(14);
       cPTH.value = pctTidakHadirMinggu;
@@ -291,7 +293,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     foot2.getCell(1).value = "PROSENTASE KETIDAKHADIRAN";
     applyStyle(foot2.getCell(1), "FFF8FAFC", "FF0F172A", true, rightAlign);
     ws.mergeCells(currentRow, 5, currentRow, 9);
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     foot2.getCell(5).value = percentage;
     applyStyle(foot2.getCell(5), "FFFED7AA", "FF7C2D12", true, centerAlign);
     ws.mergeCells(currentRow, 10, currentRow, 15);
@@ -432,10 +434,10 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(ketStartCol + 3).value = row.total;
       applyStyle(r.getCell(ketStartCol + 3), "FFF8FAFC", "FF0F172A", true, centerAlign);
 
-      const totalDaysKustom = config.customDays?.length || 0;
+      const totalDaysKustom = config.schoolDays;
       const tidakHadirKustom = row.total;
-      const pctTidakHadirKustom = totalDaysKustom > 0 ? tidakHadirKustom / totalDaysKustom : 0;
-      const pctHadirKustom = totalDaysKustom > 0 ? (totalDaysKustom - tidakHadirKustom) / totalDaysKustom : 1;
+      const pctTidakHadirKustom = absenceRate(tidakHadirKustom, totalDaysKustom);
+      const pctHadirKustom = 1 - pctTidakHadirKustom;
 
       const cKPTH = r.getCell(pctTHCol);
       cKPTH.value = pctTidakHadirKustom;
@@ -479,7 +481,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
     if (nDays > 0) {
       ws.mergeCells(currentRow, dayStartCol, currentRow, dayEndCol);
     }
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     foot2.getCell(dayStartCol).value = percentage;
     applyStyle(foot2.getCell(dayStartCol), "FFFED7AA", "FF7C2D12", true, centerAlign);
     ws.mergeCells(currentRow, ketStartCol, currentRow, pctHCol);
@@ -487,7 +489,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
 
   } else {
     // BULANAN (Sesuai PDF SMK Gajah Mungkur 1)
-    const dim = config.daysInMonth || 31;
+    const dim = config.schoolDays;
     ws.columns = [
       { width: 5 }, // NO
       { width: 10 }, // KELAS
@@ -503,7 +505,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
 
     ws.mergeCells(`A${currentRow}:J${currentRow}`);
     const titleCell = ws.getCell(`A${currentRow}`);
-    titleCell.value = `SMK GAJAH MUNGKUR 1 WURYANTORO TAHUN AJARAN 2025/2026`;
+    titleCell.value = `SMK GAJAH MUNGKUR 1 WURYANTORO — ${config.bulanTahun}`;
     applyStyle(titleCell, "FFBBF7D0", "FF064E3B", true, centerAlign);
 
     ws.getRow(currentRow).height = 25;
@@ -582,16 +584,16 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(1).value = row.no;
       applyStyle(r.getCell(1), defaultBg, "FF334155", false, centerAlign);
       r.getCell(1).font.size = 10;
-      
+
       r.getCell(2).value = row.kelas;
       applyStyle(r.getCell(2), defaultBg, "FF0F172A", true, centerAlign);
       r.getCell(2).font.size = 10;
-      
+
       r.getCell(3).value = row.nis;
       applyStyle(r.getCell(3), defaultBg, "FF475569", false, centerAlign);
       r.getCell(3).font.name = "Courier New";
       r.getCell(3).font.size = 10;
-      
+
       r.getCell(4).value = row.nama;
       applyStyle(r.getCell(4), defaultBg, "FF0F172A", true, leftAlign);
       r.getCell(4).font.size = 10;
@@ -599,23 +601,23 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
       r.getCell(5).value = row.sakit;
       applyStyle(r.getCell(5), row.sakit > 0 ? "FFFEF08A" : defaultBg, "FF000000", row.sakit > 0, centerAlign);
       r.getCell(5).font.size = 10;
-      
+
       r.getCell(6).value = row.izin;
       applyStyle(r.getCell(6), row.izin > 0 ? "FF67E8F9" : defaultBg, "FF000000", row.izin > 0, centerAlign);
       r.getCell(6).font.size = 10;
-      
+
       r.getCell(7).value = row.alpa;
       applyStyle(r.getCell(7), row.alpa > 0 ? "FFEF4444" : defaultBg, row.alpa > 0 ? "FFFFFFFF" : "FF000000", row.alpa > 0, centerAlign);
       r.getCell(7).font.size = 10;
-      
+
       const totalAbsen = row.sakit + row.izin + row.alpa;
       r.getCell(8).value = totalAbsen;
       applyStyle(r.getCell(8), "FFF8FAFC", "FF0F172A", true, centerAlign);
       r.getCell(8).font.size = 10;
 
       // Kalkulasi persentase per anak
-      const persenTidakHadir = dim > 0 ? totalAbsen / dim : 0;
-      const persenHadir = dim > 0 ? (dim - totalAbsen) / dim : 1;
+      const persenTidakHadir = absenceRate(totalAbsen, dim);
+      const persenHadir = 1 - persenTidakHadir;
 
       if (persenHadir < 0.90) {
         totalSiswaBermasalah++;
@@ -662,7 +664,7 @@ export async function downloadReportExcel(config: ReportConfig): Promise<void> {
 
     // List kelas yang ada di tabel ini
     const kelasUnik = Array.from(new Set(config.items.map(s => s.kelas))).sort();
-    
+
     kelasUnik.forEach((kls) => {
       ws.mergeCells(`A${currentRow}:C${currentRow}`);
       const cKls = ws.getCell(`A${currentRow}`);

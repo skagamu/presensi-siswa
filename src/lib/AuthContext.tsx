@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { gasPost } from "@/lib/api";
 import { toast } from "sonner";
 
 interface User {
@@ -28,6 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
+    const onExpired = () => {
+      setUser(null); setToken(null);
+      localStorage.removeItem("bk_auth_token"); localStorage.removeItem("bk_auth_user");
+      toast.error("Sesi berakhir. Silakan login kembali.");
+    };
+    window.addEventListener("bk-session-expired", onExpired);
     try {
       const savedToken = localStorage.getItem("bk_auth_token");
       const savedUser = localStorage.getItem("bk_auth_user");
@@ -41,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsReady(true);
     }
+    return () => window.removeEventListener("bk-session-expired", onExpired);
   }, []);
 
   const login = (newToken: string, userData: User) => {
@@ -48,16 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     localStorage.setItem("bk_auth_token", newToken);
     localStorage.setItem("bk_auth_user", JSON.stringify(userData));
-    window.location.href = "/presensi-siswa/";
+    router.replace("/");
   };
 
   const logout = () => {
+    void gasPost("logout").catch(() => {});
     setToken(null);
     setUser(null);
     localStorage.removeItem("bk_auth_token");
     localStorage.removeItem("bk_auth_user");
     toast.info("Anda telah keluar.");
-    window.location.href = "/presensi-siswa/login";
+    router.replace("/login");
   };
 
   return (

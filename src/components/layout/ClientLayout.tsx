@@ -18,6 +18,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     const updateDateTime = () => {
       const now = new Date();
       const dateFull = new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -25,12 +26,14 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
       }).format(now);
 
       const dateShort = new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
         weekday: "short",
         day: "numeric",
         month: "short"
       }).format(now);
 
       const time = now.toLocaleTimeString("id-ID", {
+        timeZone: "Asia/Jakarta",
         hour: "2-digit",
         minute: "2-digit",
         hour12: false
@@ -55,7 +58,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col h-screen overflow-y-auto pb-44 md:pb-0 bg-gray-50/80">
         {user && (
           <div className="sticky top-0 z-30 flex min-h-[56px] md:min-h-[64px] items-center justify-between border-b border-gray-200 bg-white/95 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 md:py-0 md:px-8 backdrop-blur shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
-            
+
             {/* MOBILE: SISI KIRI (LOGO & NAMA) */}
             <div className="md:hidden flex items-center gap-2">
               <div className="w-7 h-7 bg-gray-950 rounded-md flex items-center justify-center">
@@ -86,7 +89,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
               </div>
 
               {/* DESKTOP SISI KANAN: USER PROFILE & LOGOUT BUTTON */}
-              <button 
+              <button
                 onClick={logout}
                 className="hidden md:flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50"
               >

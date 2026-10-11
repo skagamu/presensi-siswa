@@ -3,15 +3,20 @@
 import { useState, useEffect } from "react";
 import { Download, Share, PlusSquare, X } from "lucide-react";
 
+interface InstallEvent extends Event {
+  prompt(): Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
 export function PwaInstallPrompt() {
   const [showPrompt, setShowPrompt] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<InstallEvent | null>(null);
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     // Check if already in standalone PWA mode
-    const inStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+    const inStandalone = window.matchMedia("(display-mode: standalone)").matches || (window.navigator as Navigator & { standalone?: boolean }).standalone;
     if (inStandalone) {
       setIsStandalone(true);
       return;
@@ -33,9 +38,9 @@ export function PwaInstallPrompt() {
     }
 
     // Android / Chrome beforeinstallprompt event
-    const handleBeforeInstall = (e: any) => {
+    const handleBeforeInstall = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as InstallEvent);
       setShowPrompt(true);
     };
 
@@ -56,7 +61,7 @@ export function PwaInstallPrompt() {
     }
   }, [showPrompt]);
 
-  const handleDismiss = () => {
+  function handleDismiss() {
     setShowPrompt(false);
     sessionStorage.setItem("pwa_prompt_dismissed", "true");
   };
@@ -77,7 +82,7 @@ export function PwaInstallPrompt() {
   return (
     <div className="fixed top-16 md:top-20 left-3 right-3 md:left-auto md:right-8 md:max-w-sm z-50 animate-in fade-in slide-in-from-top-4 duration-300">
       <div className="bg-gray-950/95 text-white p-3.5 rounded-xl shadow-2xl border border-gray-800 backdrop-blur flex items-center justify-between gap-3">
-        
+
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 shadow-inner">
             <img src="/presensi-siswa/logo-skagamu.png" alt="Logo" className="w-7 h-7 object-contain" />
@@ -89,7 +94,7 @@ export function PwaInstallPrompt() {
                 Ketuk <Share className="w-3 h-3 inline text-blue-400" /> lalu &apos;Add to Home Screen&apos; <PlusSquare className="w-3 h-3 inline text-blue-400" />
               </p>
             ) : (
-              <p className="text-[10px] text-gray-300 mt-0.5">Akses cepat offline & tanpa URL bar</p>
+              <p className="text-[10px] text-gray-300 mt-0.5">Akses cepat dari layar utama; perlu internet</p>
             )}
           </div>
         </div>

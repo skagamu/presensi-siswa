@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { FileWarning, RefreshCw, Search, X, Filter } from "lucide-react";
+import { getBankKasus } from "@/lib/api";
+import { FileWarning, RefreshCw, Search, X } from "lucide-react";
 
 interface Kasus {
   idKasus: string;
@@ -24,47 +25,14 @@ export default function DaftarKasusPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("SEMUA");
 
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
-
   const fetchDaftarKasus = async () => {
     setIsFetchingKasus(true);
     try {
-      const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=BankKasus&_v=${new Date().getTime()}`;
-      const response = await fetch(gvizUrl, { mode: "cors", credentials: "omit" });
-      const text = await response.text();
-      const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-
-      if (jsonMatch && jsonMatch[1]) {
-        const json = JSON.parse(jsonMatch[1]);
-        if (json.status === "ok") {
-          const rows = json.table.rows;
-          const listKasus: Kasus[] = [];
-
-          rows.forEach((row: any) => {
-            const c = row.c;
-            if (c && c[0]) {
-              let tgl = "";
-              if (c[1]?.f) tgl = c[1].f;
-              else if (c[1]?.v) tgl = String(c[1].v).replace("Date(", "").replace(")", "");
-
-              listKasus.push({
-                idKasus: c[0].v,
-                tanggal: tgl,
-                nis: c[2]?.v?.toString() || "",
-                nama: c[3]?.v || "",
-                kelas: c[4]?.v || "",
-                pelanggaran: c[5]?.v || "",
-              });
-            }
-          });
-          setDataKasus(listKasus.reverse());
-        }
-      }
-    } catch (err) {
-      toast.error("Gagal menarik data Bank Kasus dari server.");
-    } finally {
-      setIsFetchingKasus(false);
-    }
+      const res = await getBankKasus();
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Data tidak tersedia.");
+      setDataKasus(res.data.slice().reverse().map(k => ({ idKasus: k.id_kasus, tanggal: k.tanggal, nis: k.nis, nama: k.nama, kelas: k.kelas, pelanggaran: k.jenis_pelanggaran })));
+    } catch { toast.error("Gagal memuat Bank Kasus. Coba muat ulang."); }
+    finally { setIsFetchingKasus(false); }
   };
 
   useEffect(() => {

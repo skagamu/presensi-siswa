@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { fetchGasApi } from "@/lib/api";
-import { Search, X, CheckSquare, Users, Sparkles } from "lucide-react";
+import { getSiswa, saveBankKasus } from "@/lib/api";
+import { todayWib } from "@/lib/date";
+import { Search, X, CheckSquare, Sparkles } from "lucide-react";
 
 interface Siswa {
   nis: string;
@@ -19,102 +20,36 @@ interface Siswa {
 }
 
 export default function BankKasusInputPage() {
-  const [tanggal, setTanggal] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [tanggal, setTanggal] = useState<string>(todayWib);
   const [tingkat, setTingkat] = useState<string>("X");
   const [kelas, setKelas] = useState<string>("");
-  const [daftarKelas, setDaftarKelas] = useState<string[]>([]);
-  const [semuaSiswaCurrentTingkat, setSemuaSiswaCurrentTingkat] = useState<Siswa[]>([]);
   const [allStudentsAllLevels, setAllStudentsAllLevels] = useState<Siswa[]>([]);
 
-  const [isFetchingSiswa, setIsFetchingSiswa] = useState(false);
+  const [isFetchingSiswa, setIsFetchingSiswa] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
   const [pelanggaran, setPelanggaran] = useState<string>("");
   const [selectedNis, setSelectedNis] = useState<string[]>([]);
   const [searchSiswaGlobal, setSearchSiswaGlobal] = useState<string>("");
+  const requestIds = useRef(new Map<string, string>());
 
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
-
-  // 1. Preload semua siswa lintas tingkat (X, XI, XII) untuk global search
+  const [loadError, setLoadError] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
-    const loadAllStudents = async () => {
-      try {
-        const levels = ["X", "XI", "XII"];
-        const promises = levels.map(async (lvl) => {
-          const sheetName = `Siswa_${lvl}`;
-          const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}&_v=${Date.now()}`;
-          const res = await fetch(gvizUrl);
-          const text = await res.text();
-          const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-          if (match && match[1]) {
-            const json = JSON.parse(match[1]);
-            const rows = json.table.rows || [];
-            const list: Siswa[] = [];
-            rows.forEach((row: any) => {
-              const c = row.c;
-              if (c && c[1] && c[2] && c[3]) {
-                list.push({
-                  kelas: c[1].v?.toString() || "",
-                  nis: c[2].v?.toString() || "",
-                  nama: c[3].v?.toString() || "",
-                });
-              }
-            });
-            return list;
-          }
-          return [];
-        });
+    let cancelled = false;
+    getSiswa("SEMUA").then(res => {
+      if (cancelled) return;
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal memuat siswa.");
+      setAllStudentsAllLevels(res.data);
+    }).catch(error => { if (!cancelled) setLoadError(error.message || "Gagal memuat siswa."); })
+      .finally(() => { if (!cancelled) setIsFetchingSiswa(false); });
+    return () => { cancelled = true; };
+  }, [retry]);
 
-        const results = await Promise.all(promises);
-        const combined = results.flat();
-        setAllStudentsAllLevels(combined);
-      } catch (e) {
-        console.error("Gagal preload data seluruh siswa", e);
-      }
-    };
-    loadAllStudents();
-  }, []);
-
-  // 2. Load siswa per tingkat untuk tab kelas reguler
-  useEffect(() => {
-    const loadStudents = async () => {
-      setIsFetchingSiswa(true);
-      setKelas("");
-      setDaftarKelas([]);
-      try {
-        const sheetName = `Siswa_${tingkat}`;
-        const gvizUrl = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}&_v=${Date.now()}`;
-        const response = await fetch(gvizUrl);
-        const text = await response.text();
-        const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-        if (jsonMatch && jsonMatch[1]) {
-          const json = JSON.parse(jsonMatch[1]);
-          if (json.status !== "ok") return;
-          const rows = json.table.rows;
-          const students: Siswa[] = [];
-          rows.forEach((row: any) => {
-            const c = row.c;
-            if (c && c[1] && c[2] && c[3]) {
-              students.push({
-                kelas: c[1].v?.toString() || "",
-                nis: c[2].v?.toString() || "",
-                nama: c[3].v?.toString() || "",
-              });
-            }
-          });
-          setSemuaSiswaCurrentTingkat(students);
-          const uniqueClasses = Array.from(new Set(students.map((s) => s.kelas))).filter(Boolean).sort();
-          setDaftarKelas(uniqueClasses);
-          if (uniqueClasses.length > 0) setKelas(uniqueClasses[0]);
-        }
-      } catch (error) {
-        toast.error("Gagal memuat data siswa.");
-      } finally {
-        setIsFetchingSiswa(false);
-      }
-    };
-    loadStudents();
-  }, [tingkat]);
+  const semuaSiswaCurrentTingkat = useMemo(() =>
+    allStudentsAllLevels.filter(s => s.kelas.split(/\s+/)[0] === tingkat), [tingkat, allStudentsAllLevels]);
+  const daftarKelas = useMemo(() => Array.from(new Set(semuaSiswaCurrentTingkat.map(s => s.kelas))).filter(Boolean).sort(), [semuaSiswaCurrentTingkat]);
+  const activeKelas = daftarKelas.includes(kelas) ? kelas : daftarKelas[0] || "";
 
   // Data yang ditampilkan: JIKA search aktif -> cari di SELURUH siswa (X, XI, XII)
   // JIKA search kosong -> tampilkan siswa di kelas aktif
@@ -139,15 +74,17 @@ export default function BankKasusInputPage() {
         .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
     }
     return semuaSiswaCurrentTingkat
-      .filter((s) => s.kelas === kelas)
+      .filter((s) => s.kelas === activeKelas)
       .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
-  }, [isGlobalSearchActive, searchSiswaGlobal, allStudentsAllLevels, semuaSiswaCurrentTingkat, kelas]);
+  }, [isGlobalSearchActive, searchSiswaGlobal, allStudentsAllLevels, semuaSiswaCurrentTingkat, activeKelas]);
 
   const toggleSiswa = (nis: string) => {
+    if (isSaving) return;
     setSelectedNis((prev) => (prev.includes(nis) ? prev.filter((n) => n !== nis) : [...prev, nis]));
   };
 
   const toggleSemuaDisplayed = () => {
+    if (isSaving) return;
     const displayedNisList = displayedSiswa.map((s) => s.nis);
     const allSelected = displayedNisList.every((nis) => selectedNis.includes(nis));
 
@@ -159,6 +96,7 @@ export default function BankKasusInputPage() {
   };
 
   const handleSimpan = async () => {
+    if (isSaving || isFetchingSiswa || loadError) return;
     if (selectedNis.length === 0) return toast.error("Pilih minimal 1 siswa.");
     if (!tanggal) return toast.error("Pilih tanggal pelanggaran.");
     if (!pelanggaran.trim()) return toast.error("Tuliskan jenis pelanggaran yang dilakukan.");
@@ -166,14 +104,19 @@ export default function BankKasusInputPage() {
     setIsSaving(true);
     const pool = allStudentsAllLevels.length > 0 ? allStudentsAllLevels : semuaSiswaCurrentTingkat;
     const selectedStudentsData = pool.filter((s) => selectedNis.includes(s.nis));
+    const requestKey = JSON.stringify([tanggal, pelanggaran.trim(), selectedStudentsData.map(s => s.nis).sort()]);
+    const requestIdsByPayload = requestIds.current;
+    if (!requestIdsByPayload.has(requestKey)) requestIdsByPayload.set(requestKey, crypto.randomUUID());
 
     try {
-      const res = await fetchGasApi("saveBankKasus", {
+      const res = await saveBankKasus({
         date: tanggal,
         pelanggaran: pelanggaran.trim(),
+        request_id: requestIdsByPayload.get(requestKey)!,
         students: selectedStudentsData,
       });
       if (res.status === "success") {
+        requestIdsByPayload.delete(requestKey);
         toast.success(`${selectedStudentsData.length} data pelanggaran berhasil disimpan!`);
         setPelanggaran("");
         setSelectedNis([]);
@@ -181,7 +124,7 @@ export default function BankKasusInputPage() {
       } else {
         toast.error("Error dari server: " + res.message);
       }
-    } catch (error) {
+    } catch {
       toast.error("Gagal mengirim data ke server.");
     } finally {
       setIsSaving(false);
@@ -197,6 +140,7 @@ export default function BankKasusInputPage() {
         </p>
       </div>
 
+      {loadError && <div role="alert">{loadError} <Button variant="outline" onClick={() => { setIsFetchingSiswa(true); setLoadError(""); setRetry(n => n + 1); }}>Coba lagi</Button></div>}
       <div className="bg-white border border-orange-200 rounded-md overflow-hidden shadow-sm flex flex-col">
         <div className="px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4">
@@ -205,7 +149,8 @@ export default function BankKasusInputPage() {
               <Input
                 placeholder="Contoh: Merokok di kantin, Terlambat upacara, Atribut tidak lengkap..."
                 value={pelanggaran}
-                onChange={(e) => setPelanggaran(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setPelanggaran(e.target.value); }}
                 className="bg-white border-orange-200 focus-visible:ring-orange-500"
               />
             </div>
@@ -214,7 +159,8 @@ export default function BankKasusInputPage() {
               <Input
                 type="date"
                 value={tanggal}
-                onChange={(e) => setTanggal(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setTanggal(e.target.value); }}
                 className="bg-white border-gray-200"
               />
             </div>
@@ -225,13 +171,15 @@ export default function BankKasusInputPage() {
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
               value={searchSiswaGlobal}
-              onChange={(e) => setSearchSiswaGlobal(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setSearchSiswaGlobal(e.target.value); }}
               placeholder="🔍 Cari nama atau NIS siswa lintas semua kelas (X, XI, XII)..."
               className="pl-9 pr-8 h-10 text-xs sm:text-sm bg-orange-50/40 border-orange-200 focus:bg-white focus:border-orange-500 font-medium"
             />
             {searchSiswaGlobal && (
               <button
-                onClick={() => setSearchSiswaGlobal("")}
+                disabled={isSaving}
+                onClick={() => { if (!isSaving) setSearchSiswaGlobal(""); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
               >
                 <X className="w-4 h-4" />
@@ -251,6 +199,7 @@ export default function BankKasusInputPage() {
                   <span className="truncate max-w-[140px] sm:max-w-[200px]">{s.nama}</span>
                   <span className="text-[10px] text-orange-700 font-bold bg-white/70 px-1 rounded">{s.kelas}</span>
                   <button
+                    disabled={isSaving}
                     type="button"
                     onClick={() => toggleSiswa(s.nis)}
                     className="text-orange-700 hover:text-orange-950 p-0.5"
@@ -261,8 +210,9 @@ export default function BankKasusInputPage() {
                 </span>
               ))}
               <button
+                disabled={isSaving}
                 type="button"
-                onClick={() => setSelectedNis([])}
+                onClick={() => { if (!isSaving) setSelectedNis([]); }}
                 className="text-[11px] font-semibold text-red-600 hover:text-red-700 hover:underline ml-1"
               >
                 Reset Pilihan
@@ -284,7 +234,7 @@ export default function BankKasusInputPage() {
 
             <Button
               onClick={handleSimpan}
-              disabled={isSaving || isFetchingSiswa || selectedNis.length === 0}
+              disabled={isSaving || isFetchingSiswa || !!loadError || selectedNis.length === 0}
               className="font-bold bg-orange-600 hover:bg-orange-700 text-white h-9 px-5 text-xs shadow-sm w-full sm:w-auto shrink-0"
             >
               {isSaving ? "Menyimpan..." : `Simpan Pelanggaran (${selectedNis.length})`}
@@ -297,7 +247,7 @@ export default function BankKasusInputPage() {
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-t border-gray-100 pt-3 gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tingkat:</span>
-                  <Select value={tingkat} onValueChange={(val) => setTingkat(val)} disabled={isFetchingSiswa}>
+                  <Select value={tingkat} onValueChange={(val) => { if (!isSaving) setTingkat(val); }} disabled={isSaving || isFetchingSiswa}>
                     <SelectTrigger className="w-[110px] h-9 text-xs font-semibold bg-gray-50 border-gray-200">
                       <SelectValue placeholder="Tingkat" />
                     </SelectTrigger>
@@ -315,7 +265,7 @@ export default function BankKasusInputPage() {
                     variant="outline"
                     size="sm"
                     onClick={toggleSemuaDisplayed}
-                    disabled={displayedSiswa.length === 0}
+                    disabled={isSaving || displayedSiswa.length === 0}
                     className="h-8 text-xs font-semibold border-gray-200"
                   >
                     <CheckSquare className="w-3.5 h-3.5 mr-1" />
@@ -328,11 +278,12 @@ export default function BankKasusInputPage() {
                 <div className="w-full border-t border-gray-100 px-2 sm:px-0">
                   <div className="flex overflow-x-auto scrollbar-hide pt-1">
                     {daftarKelas.map((kls) => {
-                      const isActive = kelas === kls;
+                      const isActive = activeKelas === kls;
                       return (
                         <button
+                          disabled={isSaving}
                           key={kls}
-                          onClick={() => setKelas(kls)}
+                          onClick={() => { if (!isSaving) setKelas(kls); }}
                           className={`relative px-5 py-2.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors outline-none ${
                             isActive ? "text-primary font-bold" : "text-gray-500 hover:text-gray-800"
                           }`}
@@ -360,6 +311,7 @@ export default function BankKasusInputPage() {
                   variant="outline"
                   size="sm"
                   onClick={toggleSemuaDisplayed}
+                  disabled={isSaving}
                   className="h-7 text-xs font-semibold border-orange-200 text-orange-900 bg-orange-50/50"
                 >
                   {displayedSiswa.length > 0 && displayedSiswa.every((s) => selectedNis.includes(s.nis)) ? "Batal Semua Hasil" : "Pilih Semua Hasil"}
@@ -384,6 +336,7 @@ export default function BankKasusInputPage() {
               const isSelected = selectedNis.includes(siswa.nis);
               return (
                 <button
+                  disabled={isSaving}
                   key={siswa.nis}
                   onClick={() => toggleSiswa(siswa.nis)}
                   className={`flex items-center gap-3 p-4 text-left transition-colors ${
@@ -391,6 +344,7 @@ export default function BankKasusInputPage() {
                   }`}
                 >
                   <Checkbox
+                    disabled={isSaving}
                     checked={isSelected}
                     onCheckedChange={() => toggleSiswa(siswa.nis)}
                     onClick={(e) => e.stopPropagation()}
@@ -414,6 +368,7 @@ export default function BankKasusInputPage() {
               <TableRow>
                 <TableHead className="w-[50px] text-center border-r border-gray-200 font-medium">
                   <Checkbox
+                    disabled={isSaving}
                     checked={
                       displayedSiswa.length > 0 &&
                       displayedSiswa.every((s) => selectedNis.includes(s.nis))
@@ -451,7 +406,7 @@ export default function BankKasusInputPage() {
                       onClick={() => toggleSiswa(siswa.nis)}
                     >
                       <TableCell className="text-center border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={isSelected} onCheckedChange={() => toggleSiswa(siswa.nis)} />
+                        <Checkbox disabled={isSaving} checked={isSelected} onCheckedChange={() => toggleSiswa(siswa.nis)} />
                       </TableCell>
                       <TableCell className="border-r border-gray-200 text-xs font-mono text-gray-600">
                         {siswa.nis}

@@ -1,3 +1,4 @@
+import { absenceRate } from "./reportData";
 export interface ReportItem {
   no: number;
   kelas: string;
@@ -40,6 +41,7 @@ export interface ReportConfig {
   // Stats
   totalTidakHadir: number;
   totalSiswa: number;
+  schoolDays: number;
   items: ReportItem[];
 }
 
@@ -181,19 +183,19 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
       if (st === "S") { statBg = "#fef08a"; statColor = "#854d0e"; }
       else if (st === "I") { statBg = "#67e8f9"; statColor = "#155e75"; }
       else if (st === "A") { statBg = "#ef4444"; statColor = "#ffffff"; }
-      
+
       let fullStatus = st;
       if (st === "S") fullStatus = "Sakit";
       if (st === "I") fullStatus = "Izin";
       if (st === "A") fullStatus = "Alpa";
-      
+
       drawCell(x, currentY, colWidths[4], rowHeight, statBg, fullStatus, "center", '12px "Segoe UI", Arial, sans-serif', statColor, true);
-      
+
       currentY += rowHeight;
     });
 
     // Footer
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, colWidths[4], footerHeight, "#fed7aa", config.totalTidakHadir, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
 
@@ -299,7 +301,7 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     });
 
     // Footer
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, wWeek, footerHeight, "#fed7aa", config.totalTidakHadir, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
     drawCell(startX + wTitle + wWeek, currentY, wKet, footerHeight, "#f8fafc", "", "center");
@@ -399,7 +401,7 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     });
 
     // Footer
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '12px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, wWeek, footerHeight, "#fed7aa", config.totalTidakHadir, "center", '13px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
     drawCell(startX + wTitle + wWeek, currentY, wKet, footerHeight, "#f8fafc", "", "center");
@@ -500,7 +502,7 @@ export function generateReportCanvas(config: ReportConfig): HTMLCanvasElement {
     });
 
     // Footers
-    const percentage = config.totalSiswa > 0 ? ((config.totalTidakHadir / config.totalSiswa) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
+    const percentage = config.totalSiswa > 0 ? (absenceRate(config.totalTidakHadir, config.totalSiswa * config.schoolDays) * 100).toFixed(2).replace(".", ",") + "%" : "0%";
     drawCell(startX, currentY, wTitle, footerHeight, "#f8fafc", "TOTAL SISWA TIDAK HADIR", "right", '11px "Segoe UI", Arial, sans-serif', "#0f172a", true);
     drawCell(startX + wTitle, currentY, wDays, footerHeight, "#fed7aa", config.totalTidakHadir, "center", '12px "Segoe UI", Arial, sans-serif', "#7c2d12", true);
     drawCell(startX + wTitle + wDays, currentY, wKet, footerHeight, "#f8fafc", "", "center");

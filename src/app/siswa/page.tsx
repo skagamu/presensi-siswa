@@ -1,49 +1,23 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Users, Search, X, RefreshCw, Eye } from "lucide-react";
+import { getStudentSummary, getStudentDetail } from "@/lib/api";
 import { SiswaDetailModal, SiswaDetailData } from "@/components/SiswaDetailModal";
 
-interface RawSiswa {
-  nis: string;
-  nama: string;
-  kelas: string;
-  tingkat: string;
-}
-
-interface RawLog {
-  nis: string;
-  status: string;
-  tanggal: string;
-  adaSurat: boolean;
-  linkBukti?: string;
-}
-
-interface RawKasus {
-  nis: string;
-  tanggal: string;
-  pelanggaran: string;
-}
-
-interface RawPenyelesaian {
-  nis: string;
-  tanggal: string;
-  tindakan: string;
-  guru: string;
-  linkPdf?: string;
-}
-
 export default function DataSiswaPage() {
-  const [allStudents, setAllStudents] = useState<RawSiswa[]>([]);
-  const [logs, setLogs] = useState<RawLog[]>([]);
-  const [kasusList, setKasusList] = useState<RawKasus[]>([]);
-  const [penyelesaianList, setPenyelesaianList] = useState<RawPenyelesaian[]>([]);
+  const [allStudents, setAllStudents] = useState<SiswaDetailData[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const detailRequest = useRef(0);
+  const detailPending = useRef(false);
+  const detailStarted = useRef(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -53,139 +27,35 @@ export default function DataSiswaPage() {
   const [selectedSiswaDetail, setSelectedSiswaDetail] = useState<SiswaDetailData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const SHEET_ID = "1i3Nxqmsy7T6D4N17MdRgT3x7l0L_Lr3TcbthPbnPwWY";
-
-  const loadAllData = async () => {
+  const loadAllData = async (fresh = false) => {
+    detailRequest.current += 1;
+    detailPending.current = false;
+    setLoadingDetail(false);
+    setIsModalOpen(false);
+    setSelectedSiswaDetail(null);
     setIsLoading(true);
     try {
-      // 1. Fetch Students across all 3 levels
-      const levels = ["X", "XI", "XII"];
-      const studentPromises = levels.map(async (lvl) => {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=Siswa_${lvl}&_v=${Date.now()}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-        if (match && match[1]) {
-          const json = JSON.parse(match[1]);
-          const rows = json.table.rows || [];
-          const list: RawSiswa[] = [];
-          rows.forEach((r: any) => {
-            const c = r.c;
-            if (c && c[1] && c[2] && c[3]) {
-              list.push({
-                kelas: String(c[1].v || "").trim(),
-                nis: String(c[2].v || "").trim(),
-                nama: String(c[3].v || "").trim(),
-                tingkat: lvl,
-              });
-            }
-          });
-          return list;
-        }
-        return [];
-      });
-
-      // 2. Fetch LogPresensi
-      const presensiPromise = (async () => {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=LogPresensi&_v=${Date.now()}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-        if (match && match[1]) {
-          const json = JSON.parse(match[1]);
-          const rows = json.table.rows || [];
-          const list: RawLog[] = [];
-          rows.forEach((r: any) => {
-            const c = r.c;
-            if (c && c[2]) {
-              list.push({
-                nis: String(c[2].v || "").trim(),
-                tanggal: c[1]?.f || c[1]?.v || "",
-                status: String(c[5]?.v || "").toUpperCase(),
-                adaSurat: Boolean(c[6]?.v),
-                linkBukti: c[7]?.v ? String(c[7].v) : undefined,
-              });
-            }
-          });
-          return list;
-        }
-        return [];
-      })();
-
-      // 3. Fetch BankKasus
-      const kasusPromise = (async () => {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=BankKasus&_v=${Date.now()}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-        if (match && match[1]) {
-          const json = JSON.parse(match[1]);
-          const rows = json.table.rows || [];
-          const list: RawKasus[] = [];
-          rows.forEach((r: any) => {
-            const c = r.c;
-            if (c && c[2]) {
-              list.push({
-                nis: String(c[2].v || "").trim(),
-                tanggal: c[1]?.f || c[1]?.v || "",
-                pelanggaran: String(c[5]?.v || ""),
-              });
-            }
-          });
-          return list;
-        }
-        return [];
-      })();
-
-      // 4. Fetch PenyelesaianKasus
-      const penyelesaianPromise = (async () => {
-        const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=PenyelesaianKasus&_v=${Date.now()}`;
-        const res = await fetch(url);
-        const text = await res.text();
-        const match = text.match(/google\.visualization\.Query\.setResponse\((.*)\);?/);
-        if (match && match[1]) {
-          const json = JSON.parse(match[1]);
-          const rows = json.table.rows || [];
-          const list: RawPenyelesaian[] = [];
-          rows.forEach((r: any) => {
-            const c = r.c;
-            if (c && c[2]) {
-              list.push({
-                nis: String(c[2].v || "").trim(),
-                linkPdf: c[5]?.v ? String(c[5].v) : undefined,
-                tindakan: String(c[6]?.v || ""),
-                guru: String(c[7]?.v || ""),
-                tanggal: c[8]?.f || c[8]?.v || "",
-              });
-            }
-          });
-          return list;
-        }
-        return [];
-      })();
-
-      const [studentResults, presensiLogs, kasusData, penyelesaianData] = await Promise.all([
-        Promise.all(studentPromises),
-        presensiPromise,
-        kasusPromise,
-        penyelesaianPromise,
-      ]);
-
-      setAllStudents(studentResults.flat());
-      setLogs(presensiLogs);
-      setKasusList(kasusData);
-      setPenyelesaianList(penyelesaianData);
-    } catch (e) {
-      console.error(e);
-      toast.error("Gagal memuat direktori data siswa.");
-    } finally {
-      setIsLoading(false);
-    }
+      const res = await getStudentSummary(fresh);
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Data tidak tersedia.");
+      setAllStudents(res.data.students.map(s => ({ ...s, tingkat: s.tingkat || s.kelas.split(" ")[0], logs: [], kasus: [], penyelesaian: [] })));
+    } catch {
+      toast.error("Gagal memuat data siswa. Coba muat ulang.");
+    } finally { setIsLoading(false); }
   };
 
   useEffect(() => {
     loadAllData();
+    return () => { detailRequest.current += 1; detailPending.current = false; };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || process.env.NODE_ENV !== "development" || !isModalOpen || !detailStarted.current) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => console.info("[BK_UI]", JSON.stringify({ action: "studentDetailPaint", elapsedMs: Date.now() - detailStarted.current })));
+    });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [isModalOpen]);
 
   // Compute available classes based on selected tingkat
   const availableClasses = useMemo(() => {
@@ -194,59 +64,9 @@ export default function DataSiswaPage() {
     return classes;
   }, [allStudents, selectedTingkat]);
 
-  // Aggregate student stats
-  const studentsWithStats = useMemo(() => {
-    // Map logs by NIS
-    const logMap = new Map<string, RawLog[]>();
-    logs.forEach((l) => {
-      const arr = logMap.get(l.nis) || [];
-      arr.push(l);
-      logMap.set(l.nis, arr);
-    });
-
-    // Map kasus by NIS
-    const kasusMap = new Map<string, RawKasus[]>();
-    kasusList.forEach((k) => {
-      const arr = kasusMap.get(k.nis) || [];
-      arr.push(k);
-      kasusMap.set(k.nis, arr);
-    });
-
-    // Map penyelesaian by NIS
-    const penyelesaianMap = new Map<string, RawPenyelesaian[]>();
-    penyelesaianList.forEach((p) => {
-      const arr = penyelesaianMap.get(p.nis) || [];
-      arr.push(p);
-      penyelesaianMap.set(p.nis, arr);
-    });
-
-    return allStudents.map((s) => {
-      const studentLogs = logMap.get(s.nis) || [];
-      const studentKasus = kasusMap.get(s.nis) || [];
-      const studentPenyelesaian = penyelesaianMap.get(s.nis) || [];
-
-      const totalAlpha = studentLogs.filter((l) => l.status === "ALPHA").length;
-      const totalSakit = studentLogs.filter((l) => l.status === "SAKIT").length;
-      const totalIzin = studentLogs.filter((l) => l.status === "IZIN").length;
-      const totalPelanggaran = studentKasus.length;
-
-      return {
-        ...s,
-        totalAlpha,
-        totalSakit,
-        totalIzin,
-        totalPelanggaran,
-        totalAbsen: totalAlpha + totalSakit + totalIzin,
-        logs: studentLogs,
-        kasus: studentKasus,
-        penyelesaian: studentPenyelesaian,
-      };
-    });
-  }, [allStudents, logs, kasusList, penyelesaianList]);
-
   // Filter and sort students
   const filteredStudents = useMemo(() => {
-    return studentsWithStats
+    return allStudents
       .filter((s) => {
         if (selectedTingkat !== "SEMUA" && s.tingkat !== selectedTingkat) return false;
         if (selectedKelas !== "SEMUA" && s.kelas !== selectedKelas) return false;
@@ -260,11 +80,33 @@ export default function DataSiswaPage() {
         return true;
       })
       .sort((a, b) => a.nama.localeCompare(b.nama, "id"));
-  }, [studentsWithStats, selectedTingkat, selectedKelas, searchQuery]);
+  }, [allStudents, selectedTingkat, selectedKelas, searchQuery]);
 
-  const handleOpenDetail = (siswa: SiswaDetailData) => {
-    setSelectedSiswaDetail(siswa);
-    setIsModalOpen(true);
+  const handleOpenDetail = async (siswa: SiswaDetailData) => {
+    if (detailPending.current || isLoading) return;
+    const request = ++detailRequest.current;
+    // Ukur waktu dari klik pengguna; baris ini berjalan di event handler.
+    // eslint-disable-next-line react-hooks/purity
+    detailStarted.current = Date.now();
+    detailPending.current = true;
+    setLoadingDetail(true);
+    try {
+      const res = await getStudentDetail(siswa.nis, siswa.tingkat);
+      if (request !== detailRequest.current) return;
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Detail tidak tersedia.");
+      const { logs, kasus, penyelesaian } = res.data;
+      setSelectedSiswaDetail({
+        ...siswa,
+        logs: logs.filter(l => l.nis === siswa.nis).map(l => ({ tanggal: l.tanggal, status: l.status_presensi, adaSurat: l.ada_surat_dokter, linkBukti: l.link_bukti_izin })),
+        kasus: kasus.filter(k => k.nis === siswa.nis).map(k => ({ tanggal: k.tanggal, pelanggaran: k.jenis_pelanggaran })),
+        penyelesaian: penyelesaian.filter(p => p.nis === siswa.nis).map(p => ({ tanggal: p.waktu_selesai, tindakan: p.catatan_konseling, guru: p.ditangani_oleh, linkPdf: p.link_pdf_drive })),
+      });
+      setIsModalOpen(true);
+    } catch {
+      if (request === detailRequest.current) toast.error("Gagal memuat detail siswa. Coba lagi.");
+    } finally {
+      if (request === detailRequest.current) { detailPending.current = false; setLoadingDetail(false); }
+    }
   };
 
   return (
@@ -283,7 +125,7 @@ export default function DataSiswaPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={loadAllData}
+          onClick={() => loadAllData(true)}
           disabled={isLoading}
           className="h-9 text-xs font-semibold self-start sm:self-auto shrink-0"
         >
@@ -368,6 +210,18 @@ export default function DataSiswaPage() {
         </div>
       </div>
 
+      <Dialog open={loadingDetail}>
+        <DialogContent
+          aria-busy={loadingDetail}
+          onEscapeKeyDown={event => event.preventDefault()}
+          onInteractOutside={event => event.preventDefault()}
+          className="h-[100dvh] w-screen max-w-none place-content-center border-0 bg-white/90 text-center shadow-none rounded-none sm:rounded-none [&>button]:hidden"
+        >
+          <RefreshCw aria-hidden="true" className="mx-auto h-8 w-8 animate-spin text-gray-700" />
+          <DialogTitle>Memuat detail siswa</DialogTitle>
+          <DialogDescription role="status">Mohon tunggu sebentar...</DialogDescription>
+        </DialogContent>
+      </Dialog>
       {/* SISWA LIST */}
       <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm">
         {/* MOBILE VIEW */}
@@ -382,8 +236,7 @@ export default function DataSiswaPage() {
             filteredStudents.map((s) => (
               <div
                 key={s.nis}
-                onClick={() => handleOpenDetail(s)}
-                className="p-4 hover:bg-gray-50 active:bg-gray-100 cursor-pointer transition-colors space-y-2"
+                className="p-4 hover:bg-gray-50 transition-colors space-y-2"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -392,7 +245,7 @@ export default function DataSiswaPage() {
                       NIS: <span className="font-mono">{s.nis}</span> • <span className="font-bold text-gray-800">{s.kelas}</span>
                     </p>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-gray-400">
+                  <Button aria-label={`Lihat detail ${s.nama}`} onClick={() => handleOpenDetail(s)} disabled={loadingDetail} variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-gray-400">
                     <Eye className="w-4 h-4" />
                   </Button>
                 </div>
@@ -486,6 +339,7 @@ export default function DataSiswaPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled={loadingDetail}
                         onClick={(e) => {
                           e.stopPropagation();
                           handleOpenDetail(s);
@@ -509,6 +363,9 @@ export default function DataSiswaPage() {
         siswa={selectedSiswaDetail}
         isOpen={isModalOpen}
         onClose={() => {
+          detailRequest.current += 1;
+          detailPending.current = false;
+          setLoadingDetail(false);
           setIsModalOpen(false);
           setSelectedSiswaDetail(null);
         }}

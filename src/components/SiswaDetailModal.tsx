@@ -53,8 +53,6 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
 
   if (!siswa) return null;
 
-  const totalAbsen = siswa.totalAlpha + siswa.totalSakit + siswa.totalIzin;
-
   const getEmbedUrl = (url: string) => {
     if (!url) return "";
     if (url.includes("drive.google.com/file/d/")) {
@@ -78,11 +76,13 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                 <User className="w-5 h-5 text-gray-700" />
                 {siswa.nama}
               </DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm text-gray-500 mt-1">
-                NIS: <span className="font-mono font-semibold text-gray-800">{siswa.nis}</span> • Kelas:{" "}
-                <Badge variant="outline" className="font-bold text-gray-900 border-gray-300">
-                  {siswa.kelas}
-                </Badge>
+              <DialogDescription asChild className="text-xs sm:text-sm text-gray-500 mt-1">
+                <div>
+                  NIS: <span className="font-mono font-semibold text-gray-800">{siswa.nis}</span> • Kelas:{" "}
+                  <Badge variant="outline" className="font-bold text-gray-900 border-gray-300">
+                    {siswa.kelas}
+                  </Badge>
+                </div>
               </DialogDescription>
             </div>
           </div>
@@ -279,7 +279,7 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
             )}
           </TabsContent>
         </Tabs>
-      
+
         {/* MODAL PREVIEW BUKTI */}
         <Dialog open={!!previewUrl} onOpenChange={(open) => !open && setPreviewUrl(null)}>
           <DialogContent className="max-w-3xl h-[85vh] p-0 overflow-hidden flex flex-col bg-slate-900 border-slate-800 rounded-2xl [&>button]:hidden">

@@ -1,23 +1,24 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/AuthContext";
 import { AuthGuard } from "@/components/layout/AuthGuard";
-import { ClientLayout } from "@/components/layout/ClientLayout"; 
+import { ClientLayout } from "@/components/layout/ClientLayout";
 
 export const metadata: Metadata = {
   title: "Sistem Manajemen BK",
   description: "Sistem Informasi Presensi dan Pelanggaran Kedisiplinan Siswa",
   manifest: "/presensi-siswa/manifest.json",
-  themeColor: "#2563eb",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Sistem BK",
   },
 };
+
+export const viewport: Viewport = { themeColor: "#2563eb" };
 
 export default function RootLayout({
   children,
@@ -37,28 +38,7 @@ export default function RootLayout({
           </AuthGuard>
         </AuthProvider>
         <Toaster position="top-center" />
-        
-        {/* Clear old PWA cache that can serve stale GitHub Pages bundles. */}
-        <script dangerouslySetInnerHTML={{
-          __html: `
-            if ('serviceWorker' in navigator) {
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                  registrations.forEach(function(registration) { registration.unregister(); });
-                });
-              });
-            }
-            if ('caches' in window) {
-              caches.keys().then(function(keys) {
-                keys.forEach(function(key) { caches.delete(key); });
-                if (keys.length && !sessionStorage.getItem('bk_cache_cleared')) {
-                  sessionStorage.setItem('bk_cache_cleared', '1');
-                  location.reload();
-                }
-              });
-            }
-          `
-        }} />
+
       </body>
     </html>
   );

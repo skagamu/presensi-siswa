@@ -5,7 +5,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { login as gasLogin } from "@/lib/api";
 import { toast } from "sonner";
 import { Eye, EyeOff, Lock, User } from "lucide-react";
-import Image from "next/image";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -23,15 +22,15 @@ export default function LoginPage() {
       const res = await gasLogin(username.trim().toLowerCase(), password);
 
       if (res.status === "success") {
-        const data = res.data as any;
+        const data = res.data;
+        if (!data?.token || !data.user) throw new Error("Balasan login tidak valid.");
         const { token, user } = data;
         toast.success(`Selamat datang, ${user.nama}!`);
         login(token, user);
-        setTimeout(() => { window.location.href = "/presensi-siswa/"; }, 300);
       } else {
         toast.error(res.message || "Login gagal.");
       }
-    } catch (err) {
+    } catch {
       toast.error("Tidak dapat terhubung ke server. Periksa koneksi internet.");
     } finally {
       setIsLoading(false);
@@ -41,7 +40,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen w-full bg-[#f3f4f6] flex items-center justify-center p-3 sm:p-6 md:p-10">
       <div className="w-full max-w-5xl bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
-        
+
         {/* LEFT PANE: LOGO & BRANDING */}
         <div className="lg:col-span-5 bg-[#f8fafc] border-b lg:border-b-0 lg:border-r border-gray-100 p-8 sm:p-10 flex flex-col justify-between items-center text-center">
           {/* HEADER TAG */}
@@ -54,9 +53,9 @@ export default function LoginPage() {
           {/* SCHOOL LOGO */}
           <div className="my-6 lg:my-0 flex flex-col items-center justify-center">
             <div className="relative w-40 h-40 sm:w-48 sm:h-48 drop-shadow-md transition-transform hover:scale-105 duration-300">
-              <img 
-                src="/presensi-siswa/logo-skagamu.png" 
-                alt="Logo SMK Gajah Mungkur 1 Wuryantoro" 
+              <img
+                src="/presensi-siswa/logo-skagamu.png"
+                alt="Logo SMK Gajah Mungkur 1 Wuryantoro"
                 className="w-full h-full object-contain"
               />
             </div>

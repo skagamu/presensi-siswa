@@ -1,25 +1,68 @@
-// Google Apps Script Web App URL
-export const API_URL =
-  "https://script.google.com/macros/s/AKfycbxnV2plOOQfhZHhfK--IOzmqaJCXpOpulVxzcwaF7HqE4cZAWJUc52q8yjYt-W3MBcI/exec";
+// Set explicitly per environment so local/test builds cannot silently target another backend.
+export const API_URL = process.env.NEXT_PUBLIC_GAS_API_URL?.trim() || "";
+
+function requireApiUrl() {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_GAS_API_URL belum dikonfigurasi untuk environment ini.");
+  return API_URL;
+}
 
 // ─── Response shape from GAS backend ────────────────────────────────────────
 export interface GasResponse<T = unknown> {
   status: "success" | "error";
   message?: string;
   data?: T;
+  profile?: { gasMs: number; openSpreadsheetMs: number; sheetLookupMs: number; sheetReadMs: number; sheetReads: number; cache?: string };
+}
+
+export interface AttendancePageData {
+  students: Siswa[];
+  logs: LogPresensi[];
 }
 
 // ─── Core transport ──────────────────────────────────────────────────────────
+
+const pendingGets = new Map<string, Promise<GasResponse<unknown>>>();
 
 /** GET ?action=<action>&<params>  — reads from Sheets */
 export async function gasGet<T = unknown>(
   action: string,
   params: Record<string, string> = {}
 ): Promise<GasResponse<T>> {
-  const qs = new URLSearchParams({ action, ...params });
-  const res = await fetch(`${API_URL}?${qs}`, { method: "GET" });
-  if (!res.ok) throw new Error(`GAS GET ${action} → HTTP ${res.status}`);
-  return res.json();
+  const apiUrl = requireApiUrl();
+  const started = Date.now();
+  const profiling = process.env.NODE_ENV === "development";
+  const qs = new URLSearchParams({ ...params, ...(profiling ? { profile: "true" } : {}), action, token: sessionToken() });
+  const key = qs.toString();
+  const existing = pendingGets.get(key);
+  if (existing) return existing as Promise<GasResponse<T>>;
+  const request = (async () => {
+  const url = `${apiUrl}?${qs}`;
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(60000) });
+    const host = safeResponseHost(res.url);
+    // ContentService redirects each response to a one-time googleusercontent.com URL.
+    if (res.status !== 404 || !res.redirected || host !== "script.googleusercontent.com" || attempt === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+  if (!res.ok) {
+    const host = safeResponseHost(res.url);
+    console.warn("[BK_API]", JSON.stringify({ action, method: "GET", status: res.status, host, redirected: res.redirected, elapsedMs: Date.now() - started }));
+    throw new Error(`GAS GET ${action} → HTTP ${res.status}${host ? ` (${host})` : ""}`);
+  }
+  const result = checkSession<T>(await res.json());
+  if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
+  return result;
+  })();
+  pendingGets.set(key, request);
+  try { return await request; }
+  finally { if (pendingGets.get(key) === request) pendingGets.delete(key); }
+
+}
+
+function safeResponseHost(responseUrl: string): string {
+  try { return new URL(responseUrl).hostname; }
+  catch { return ""; }
 }
 
 /** POST body: { action, data } | { action, ...payload }  — writes to Sheets */
@@ -27,25 +70,44 @@ export async function gasPost<T = unknown>(
   action: string,
   payload: Record<string, unknown> = {}
 ): Promise<GasResponse<T>> {
-  const res = await fetch(API_URL, {
+  const started = Date.now();
+  const profiling = process.env.NODE_ENV === "development";
+  const res = await fetch(requireApiUrl(), {
     method: "POST",
+    keepalive: action === "logout",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, ...payload }),
+    body: JSON.stringify({ ...payload, ...(profiling ? { profile: "true" } : {}), action, token: action === "login" ? "" : sessionToken() }),
+    signal: AbortSignal.timeout(60000),
   });
   if (!res.ok) throw new Error(`GAS POST ${action} → HTTP ${res.status}`);
-  return res.json();
+  const result = checkSession<T>(await res.json());
+  if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
+  return result;
+}
+
+function sessionToken(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem("bk_auth_token") || "";
+}
+
+function checkSession<T>(response: GasResponse<T> & { code?: string }): GasResponse<T> {
+  if (response.code === "UNAUTHORIZED" && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("bk-session-expired"));
+  }
+  return response;
 }
 
 // ─── Type definitions (mirrors backend-rest-api.md) ─────────────────────────
 
 export interface Siswa {
-  no: number;
+  no?: number;
   kelas: string;
   nis: string;
   nama: string;
   nisn?: string;
   agama?: string;
-  "L/P": string;
+  "L/P"?: string;
+  tingkat?: string;
 }
 
 export interface LogPresensi {
@@ -83,39 +145,37 @@ export interface PenyelesaianKasus {
   waktu_selesai: string;
 }
 
-export interface User {
-  user_id: string;
-  username: string;
-  password_hash: string;
-  nama_guru_bk: string;
-  status: string;
-}
-
+export interface User { id: string; username: string; nama: string; role: string; }
+export interface LoginData { token: string; user: User; expiresAt: number; }
 export interface DashboardStats {
-  totalSiswa: number;
-  hadirHariIni: number;
-  sakitHariIni: number;
-  izinHariIni: number;
-  alphaHariIni: number;
-  alertAktif: number;
+  totalMurid: number; hadirHariIni: number; absenHariIni: number; persentaseKehadiran: number;
+  tanggal: string; breakdown: { SAKIT: number; IZIN: number; ALPHA: number };
+  chart: { weekly: { label: string; hadir: number; absen: number }[]; monthly: { label: string; hadir: number; absen: number }[] };
 }
-
 export interface RekapBulananRow {
-  nis: string;
-  nama: string;
-  kelas: string;
-  [date: string]: string | number; // dynamic date columns
+  nis: string; nama: string; kelas: string; sakit: number; izin: number; alpha: number;
+  totalTidakHadir: number; dailyLogs: Record<string, string>;
 }
-
+export interface BankKasus { id_kasus: string; tanggal: string; nis: string; nama: string; kelas: string; jenis_pelanggaran: string; waktu_simpan: string; }
+export interface StudentDirectory { students: Siswa[]; logs: LogPresensi[]; kasus: BankKasus[]; penyelesaian: PenyelesaianKasus[]; }
+export const getBankKasus = () => gasGet<BankKasus[]>("getBankKasus");
+export interface SiswaSummary extends Siswa { totalAlpha: number; totalSakit: number; totalIzin: number; totalPelanggaran: number; }
+export const getStudentSummary = (fresh = false) => gasGet<{ students: SiswaSummary[] }>("getStudentDirectory", { summary: "true", ...(fresh ? { fresh: "true" } : {}) });
+export const getStudentDetail = (nis: string, tingkat?: string) => gasGet<StudentDirectory>("getStudentDirectory", { nis, ...(tingkat ? { tingkat } : {}) });
 // ─── GET helpers ─────────────────────────────────────────────────────────────
 
 export const getSiswa = (tingkat: "X" | "XI" | "XII" | "SEMUA" = "SEMUA") =>
   gasGet<Siswa[]>("getSiswa", { tingkat });
 
+export const getAttendancePageData = (tingkat: "X" | "XI" | "XII", date: string, fresh = false) =>
+  gasGet<AttendancePageData>("getAttendancePageData", { tingkat, date, ...(fresh ? { fresh: "true" } : {}) });
+
 export const getLogPresensi = (params?: {
   nis?: string;
   date?: string;   // yyyy-mm
   status?: string;
+  kelas?: string;
+  academic_year?: string;
 }) => gasGet<LogPresensi[]>("getLogPresensi", dropEmpty(params));
 
 export const getPeringatanKasus = (params?: {
@@ -126,10 +186,8 @@ export const getPeringatanKasus = (params?: {
 export const getPenyelesaianKasus = (nis?: string) =>
   gasGet<PenyelesaianKasus[]>("getPenyelesaianKasus", dropEmpty({ nis }));
 
-export const getUsers = () => gasGet<User[]>("getUsers");
-
 export const getPriorityAlerts = () =>
-  gasGet<PeringatanKasus[]>("getPriorityAlerts");
+  getPeringatanKasus({ status_peringatan: "AKTIF" });
 
 export const getDashboardStats = (date?: string) =>
   gasGet<DashboardStats>("getDashboardStats", dropEmpty({ date }));
@@ -150,26 +208,12 @@ export const getRekapRentang = (params?: {
 // ─── POST helpers ────────────────────────────────────────────────────────────
 
 export const login = (username: string, password: string) =>
-  gasPost<User>("login", { username, password });
+  gasPost<LoginData>("login", { username, password });
 
 export const saveAttendance = (
   date: string,
   attendances: Partial<LogPresensi>[]
-) => gasPost("saveAttendance", { date, attendances });
-
-export const createLogPresensi = (data: Omit<LogPresensi, "id_presensi">) =>
-  gasPost("createLogPresensi", { data });
-
-export const createBatchLogPresensi = (data: Omit<LogPresensi, "id_presensi">[]) =>
-  gasPost("createBatchLogPresensi", { data });
-
-export const createPeringatanKasus = (
-  data: Omit<PeringatanKasus, "id_peringatan">
-) => gasPost("createPeringatanKasus", { data });
-
-export const createPenyelesaianKasus = (
-  data: Omit<PenyelesaianKasus, "id_penyelesaian">
-) => gasPost("createPenyelesaianKasus", { data });
+) => gasPost<{ alertSyncPending?: boolean; uploadedLinks?: { nis: string; linkBukti: string }[] }>("saveAttendance", { date, attendances });
 
 export const resolveCase = (payload: {
   id_peringatan: string;
@@ -185,18 +229,9 @@ export const resolveCase = (payload: {
 export const saveBankKasus = (payload: {
   date: string;
   pelanggaran: string;
+  request_id: string;
   students: { nis: string; nama: string; kelas: string }[];
 }) => gasPost("saveBankKasus", payload);
-
-export const createSiswa = (
-  tingkat: "X" | "XI" | "XII",
-  data: Omit<Siswa, "no">
-) => gasPost("createSiswa", { tingkat, data });
-
-export const createBatchSiswa = (
-  tingkat: "X" | "XI" | "XII",
-  data: Omit<Siswa, "no">[]
-) => gasPost("createBatchSiswa", { tingkat, data });
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 

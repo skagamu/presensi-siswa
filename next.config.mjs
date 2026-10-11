@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'export',
-  basePath: '/presensi-siswa',
-  typescript: { ignoreBuildErrors: true }
+  basePath: '/presensi-siswa'
 };
 export default nextConfig;
