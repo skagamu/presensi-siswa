@@ -17,7 +17,7 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 ## Status saat dicek — 11 Oktober 2026
 
 - **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 6 commit di depan dan 0 di belakang `origin/main`; belum dipush.
-- Daftar repository Actions variables saat ini tidak menampilkan `NEXT_PUBLIC_GAS_API_URL`. Workflow Pages membutuhkannya untuk build; tanpa nilai produksi yang benar, build berhenti.
+- Deploy Pages live terakhir berhasil dari `main` pada commit `fdd13e6` (30 September 2026). Workflow pada commit itu berbeda dari kandidat saat ini. Pemeriksaan repository Variables tidak menemukan `NEXT_PUBLIC_GAS_API_URL`; pastikan konfigurasi kandidat menyediakan URL `/exec` produksi sebelum merge. URL yang dipakai artifact live lama belum berhasil diverifikasi.
 - Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru `eb8596d`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
 - Pemeriksaan `clasp deployments` menunjukkan GAS produksi v29. Verifikasi lagi saat rilis.
 - Backup spreadsheet/source yang tersedia bertanggal 10 Oktober; buat backup segar sebelum cutover. Uji rollback auth/password-hash di salinan: dokumen rollback yang ada mencatat kompatibilitas v29 sebagai risiko.
@@ -26,7 +26,7 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 
 - [ ] **Branch dan commit** — tinjau seluruh diff, commit terpilih sama dengan yang sudah diuji; working tree bersih.
 - [ ] **Pasangan frontend/backend** — catat kedua versi yang kompatibel. Frontend harus dibangun dengan `NEXT_PUBLIC_GAS_API_URL` produksi; jangan memakai `build:test`.
-- [ ] **GitHub Pages** — pastikan secret/variable `NEXT_PUBLIC_GAS_API_URL` di repository menunjuk endpoint produksi yang benar. Push/merge ke `main` memicu workflow deploy otomatis; tinjau Actions sebelum merge.
+- [ ] **GitHub Pages** — pastikan workflow kandidat memperoleh `NEXT_PUBLIC_GAS_API_URL` produksi yang benar dan build berhasil. Bila memakai repository variable, pastikan `vars.NEXT_PUBLIC_GAS_API_URL` sudah diisi; bila memakai sumber konfigurasi lain, verifikasi nilai akhirnya di build. Merge ke `main` memicu workflow deploy otomatis; tinjau Actions sebelum merge.
 - [ ] **GAS** — pastikan project/script ID dan Script Property `SPREADSHEET_ID` menunjuk produksi yang benar; deployment memakai Web App yang benar dan akses/execute-as sesuai konfigurasi yang disetujui.
 - [ ] **Tidak ada harness uji** — source produksi tidak memuat `runTestSuite`, `getQaResult`, fault injection, NIS sintetis, atau `test_delay_ms`.
 - [ ] **Backup baru** — buat snapshot baca-saja spreadsheet produksi dan source GAS aktif; verifikasi file dapat dibaca, ukuran/hash tercatat, serta lokasi privat dan izin akses terbatas. Jangan menganggap backup lama sebagai backup rilis ini.
