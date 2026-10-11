@@ -183,6 +183,14 @@ test('login creates random server session and migrates plaintext', () => {
     token
   }).status, 'success');
 });
+test('legacy backend rollback needs the pre-release password snapshot', () => {
+  const migratedPassword = tables.Users[1][2];
+  const originalPassword = initialTables.Users[1][2];
+  assert.match(migratedPassword, /^sha256:/);
+  assert.notEqual(migratedPassword, originalPassword);
+  assert.notEqual(String(migratedPassword).trim(), String('secret').trim(), 'old plaintext comparison cannot accept a migrated value');
+  assert.equal(String(originalPassword).trim(), String('secret').trim(), 'restoring the Users password snapshot restores legacy login');
+});
 test('missing spreadsheet configuration fails closed', () => {
   const current = props.SPREADSHEET_ID;
   delete props.SPREADSHEET_ID;
