@@ -37,13 +37,19 @@ export async function gasGet<T = unknown>(
   if (existing) return existing as Promise<GasResponse<T>>;
   const request = (async () => {
   const url = `${apiUrl}?${qs}`;
-  let res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(60000) });
-  // Apps Script can intermittently 404 the ContentService redirect; retrying this read creates a fresh redirect.
-  if (res.status === 404) {
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(60000) });
+    const host = safeResponseHost(res.url);
+    // ContentService redirects each response to a one-time googleusercontent.com URL.
+    if (res.status !== 404 || !res.redirected || host !== "script.googleusercontent.com" || attempt === 1) break;
     await new Promise((resolve) => setTimeout(resolve, 750));
-    res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(60000) });
   }
-  if (!res.ok) throw new Error(`GAS GET ${action} → HTTP ${res.status}`);
+  if (!res.ok) {
+    const host = safeResponseHost(res.url);
+    console.warn("[BK_API]", JSON.stringify({ action, method: "GET", status: res.status, host, redirected: res.redirected, elapsedMs: Date.now() - started }));
+    throw new Error(`GAS GET ${action} → HTTP ${res.status}${host ? ` (${host})` : ""}`);
+  }
   const result = checkSession<T>(await res.json());
   if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
   return result;
@@ -52,6 +58,11 @@ export async function gasGet<T = unknown>(
   try { return await request; }
   finally { if (pendingGets.get(key) === request) pendingGets.delete(key); }
 
+}
+
+function safeResponseHost(responseUrl: string): string {
+  try { return new URL(responseUrl).hostname; }
+  catch { return ""; }
 }
 
 /** POST body: { action, data } | { action, ...payload }  — writes to Sheets */

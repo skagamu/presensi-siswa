@@ -47,12 +47,14 @@ export default function PresensiHarianPage() {
   const [syncedSelection, setSyncedSelection] = useState("");
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [saveUncertain, setSaveUncertain] = useState(false);
   const selection = `${tingkat}/${kelas}/${tanggal}`;
   const dataSelection = `${tingkat}/${tanggal}`;
   const currentSelection = useRef(selection);
   useEffect(() => { currentSelection.current = selection; }, [selection]);
   const proofRequest = useRef(0);
   const saveNeedsReconciliation = useRef(false);
+  const pendingAttendanceSave = useRef<{ date: string; tingkat: string; kelas: string; rows: Parameters<typeof saveAttendance>[1] } | null>(null);
   const closeUploadModal = () => { proofRequest.current += 1; setActiveModalNis(null); };
   const ready = !isFetching && syncedSelection === selection && !loadError;
   const schoolDay = isSchoolDayWib(tanggal);
@@ -63,6 +65,8 @@ export default function PresensiHarianPage() {
       if (cancelled) return;
       if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal memuat presensi.");
       saveNeedsReconciliation.current = false;
+      pendingAttendanceSave.current = null;
+      setSaveUncertain(false);
       setSemuaSiswa(res.data.students);
       setLogsHari(res.data.logs);
       setLoadedDataKey(dataSelection);
@@ -112,8 +116,9 @@ export default function PresensiHarianPage() {
     if(filterSiswa.length === 0) return toast.error("Tidak ada siswa.");
     if(!tanggal) return toast.error("Pilih tanggal.");
 
-    setIsSaving(true);
-    const dataKirim = filterSiswa.map(s => {
+    const dataKirim = saveNeedsReconciliation.current && pendingAttendanceSave.current
+      ? pendingAttendanceSave.current.rows
+      : filterSiswa.map(s => {
       const lampiran = lampiranSiswa[s.nis];
       return {
         nis: s.nis,
@@ -126,11 +131,20 @@ export default function PresensiHarianPage() {
         link_bukti_izin: lampiran?.linkBukti || "",
       };
     });
+    if (saveNeedsReconciliation.current && pendingAttendanceSave.current &&
+        (pendingAttendanceSave.current.date !== tanggal || pendingAttendanceSave.current.tingkat !== tingkat || pendingAttendanceSave.current.kelas !== kelas)) {
+      toast.error("Pilihan berubah. Periksa status presensi sebelum menyimpan ulang.");
+      return;
+    }
+    setIsSaving(true);
+    const attemptedSave = { date: tanggal, tingkat, kelas, rows: dataKirim };
 
     try {
       const res = await saveAttendance(tanggal, dataKirim);
       if (res.status !== "success") throw new Error(res.message || "Gagal menyimpan presensi.");
       saveNeedsReconciliation.current = false;
+      pendingAttendanceSave.current = null;
+      setSaveUncertain(false);
       const uploadedLinks = new Map((res.data?.uploadedLinks || []).map(({ nis, linkBukti }) => [nis, linkBukti]));
       const savedRows: LogPresensi[] = dataKirim.map(row => ({
         nis: row.nis,
@@ -148,6 +162,8 @@ export default function PresensiHarianPage() {
       else toast.success(`Presensi Kelas ${kelas} tanggal ${tanggal} disimpan!`);
     } catch {
       saveNeedsReconciliation.current = true;
+      pendingAttendanceSave.current = attemptedSave;
+      setSaveUncertain(true);
       toast.error("Gagal mengirim presensi.");
     } finally {
       setIsSaving(false);
@@ -155,7 +171,7 @@ export default function PresensiHarianPage() {
   };
 
   const setStatus = (nis: string, stat: StatusAbsen) => {
-    if (!ready || isSaving) return;
+    if (!ready || isSaving || saveUncertain) return;
     setStatusSiswa(prev => ({...prev, [nis]: stat}));
     if (stat === "HADIR" || stat === "ALPHA") {
       setLampiranSiswa(prev => {
@@ -167,7 +183,7 @@ export default function PresensiHarianPage() {
   };
 
   const openUploadModal = (nis: string) => {
-    if (!ready || isSaving) return;
+    if (!ready || isSaving || saveUncertain) return;
     proofRequest.current += 1;
     const existing = lampiranSiswa[nis];
     setTempAdaDokter(existing ? existing.adaSuratDokter : false);
@@ -176,7 +192,7 @@ export default function PresensiHarianPage() {
   };
 
   const handleSaveModalBukti = async () => {
-    if (!activeModalNis || !ready || isSaving) return;
+    if (!activeModalNis || !ready || isSaving || saveUncertain) return;
     const modalSelection = selection;
     const request = ++proofRequest.current;
 
@@ -220,7 +236,7 @@ export default function PresensiHarianPage() {
   };
 
   const removeBukti = (nis: string) => {
-    if (!ready || isSaving) return;
+    if (!ready || isSaving || saveUncertain) return;
     setLampiranSiswa(prev => {
       const copy = { ...prev };
       delete copy[nis];
@@ -231,6 +247,12 @@ export default function PresensiHarianPage() {
 
   const activeSiswaObj = semuaSiswa.find(s => s.nis === activeModalNis);
   const activeStatus = activeModalNis ? statusSiswa[activeModalNis] : null;
+  const retryAttendanceLoad = () => {
+    setLoadedDataKey("");
+    setIsFetching(true);
+    setLoadError("");
+    setRetry(n => n + 1);
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-5 pb-24 md:pb-0">
@@ -239,7 +261,7 @@ export default function PresensiHarianPage() {
         <p className="text-muted-foreground mt-1 text-sm">Default status siswa adalah HADIR. Klik opsi untuk mengubah & lampirkan bukti.</p>
       </div>
 
-      {loadError && <div role="alert" className="text-sm text-red-600">{loadError} <Button variant="outline" onClick={() => { setIsFetching(true); setLoadError(""); setRetry(n => n + 1); }}>Coba lagi</Button></div>}
+      {(loadError || saveUncertain) && <div role="alert" className="text-sm text-red-600">{loadError || "Respons simpan belum diterima; coba ulangi penyimpanan yang sama atau periksa status."} <Button variant="outline" disabled={isFetching} onClick={retryAttendanceLoad}>{saveUncertain ? "Periksa status" : "Coba lagi"}</Button></div>}
       <div className="grid grid-cols-4 gap-2">
         {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((status) => (
           <div key={status} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
@@ -316,8 +338,10 @@ export default function PresensiHarianPage() {
         ) : (<>
         {/* MOBILE VIEW */}
         <div className="block md:hidden divide-y divide-gray-100">
-          {(isFetching || (!ready && !loadError && schoolDay && !!kelas)) ? (
+          {(isFetching || (!ready && !loadError && !saveUncertain && schoolDay && !!kelas)) ? (
             <div className="p-8 text-center text-sm text-gray-500">Memuat data siswa...</div>
+          ) : saveUncertain ? (
+            <div className="p-8 text-center text-sm text-amber-700">Status simpan belum dipastikan. Presensi dikunci sampai data terbaru berhasil dimuat.</div>
           ) : filterSiswa.length === 0 ? (
             <div className="p-8 text-center text-sm text-gray-500">Tidak ada siswa di kelas ini.</div>
           ) : (
@@ -337,7 +361,7 @@ export default function PresensiHarianPage() {
                       <Button
                         size="sm"
                         variant={lampiran ? "secondary" : "outline"}
-                        disabled={!ready || isSaving}
+                        disabled={!ready || isSaving || saveUncertain}
                         onClick={() => openUploadModal(siswa.nis)}
                         className={`h-7 px-2 text-[11px] gap-1 shrink-0 ${lampiran ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-gray-600'}`}
                       >
@@ -350,7 +374,7 @@ export default function PresensiHarianPage() {
                     {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((item) => (
                       <button
                         key={item}
-                        disabled={!ready || isSaving}
+                        disabled={!ready || isSaving || saveUncertain}
                         onClick={() => setStatus(siswa.nis, item)}
                         className={`h-9 rounded text-[11px] font-semibold transition-all ${status === item ? "bg-white text-gray-950 shadow-sm ring-1 ring-black/5" : "text-gray-500"}`}
                       >
@@ -361,7 +385,7 @@ export default function PresensiHarianPage() {
                   {lampiran && (
                     <div className="flex items-center justify-between text-[11px] bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-100">
                       <span className="truncate max-w-[200px]">{lampiran.fileName} {lampiran.adaSuratDokter ? "(Surat Dokter)" : ""}</span>
-                      <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving} onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
+                      <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving || saveUncertain} onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -384,12 +408,14 @@ export default function PresensiHarianPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(isFetching || (!ready && !loadError && schoolDay && !!kelas)) ? (
+              {(isFetching || (!ready && !loadError && !saveUncertain && schoolDay && !!kelas)) ? (
                 <TableRow>
                       <TableCell colSpan={4} className="h-48 text-center text-muted-foreground">
                     Sedang memuat data...
                   </TableCell>
                 </TableRow>
+              ) : saveUncertain ? (
+                <TableRow><TableCell colSpan={4} className="h-48 text-center text-amber-700">Status simpan belum dipastikan. Presensi dikunci sampai data terbaru berhasil dimuat.</TableCell></TableRow>
               ) : filterSiswa.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-48 text-center text-muted-foreground">
@@ -411,16 +437,16 @@ export default function PresensiHarianPage() {
                       </TableCell>
                       <TableCell className="p-2 sm:p-4 border-r border-gray-200">
                         <div className="flex w-full bg-gray-100 p-1 rounded-lg justify-between gap-1 max-w-[340px] mx-auto shadow-inner">
-                          <button disabled={!ready || isSaving} onClick={() => setStatus(siswa.nis, "HADIR")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "HADIR" ? "bg-white text-green-700 shadow-sm ring-1 ring-black/5" : "text-gray-500 hover:bg-gray-200"}`}>
+                          <button disabled={!ready || isSaving || saveUncertain} onClick={() => setStatus(siswa.nis, "HADIR")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "HADIR" ? "bg-white text-green-700 shadow-sm ring-1 ring-black/5" : "text-gray-500 hover:bg-gray-200"}`}>
                             Hadir
                           </button>
-                          <button disabled={!ready || isSaving} onClick={() => setStatus(siswa.nis, "SAKIT")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "SAKIT" ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
+                          <button disabled={!ready || isSaving || saveUncertain} onClick={() => setStatus(siswa.nis, "SAKIT")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "SAKIT" ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
                             Sakit
                           </button>
-                          <button disabled={!ready || isSaving} onClick={() => setStatus(siswa.nis, "IZIN")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "IZIN" ? "bg-yellow-50 text-yellow-700 shadow-sm ring-1 ring-yellow-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
+                          <button disabled={!ready || isSaving || saveUncertain} onClick={() => setStatus(siswa.nis, "IZIN")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "IZIN" ? "bg-yellow-50 text-yellow-700 shadow-sm ring-1 ring-yellow-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
                             Izin
                           </button>
-                          <button disabled={!ready || isSaving} onClick={() => setStatus(siswa.nis, "ALPHA")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "ALPHA" ? "bg-red-50 text-red-700 shadow-sm ring-1 ring-red-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
+                          <button disabled={!ready || isSaving || saveUncertain} onClick={() => setStatus(siswa.nis, "ALPHA")} className={`flex-1 py-2 px-1 text-xs sm:text-sm font-semibold rounded-md transition-all duration-200 ${status === "ALPHA" ? "bg-red-50 text-red-700 shadow-sm ring-1 ring-red-500/20" : "text-gray-500 hover:bg-gray-200"}`}>
                             Alpha
                           </button>
                         </div>
@@ -431,7 +457,7 @@ export default function PresensiHarianPage() {
                             <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-md text-xs">
                               <FileCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span className="truncate max-w-[90px] font-medium" title={lampiran.fileName}>{lampiran.fileName}</span>
-                              <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving} onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
+                              <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving || saveUncertain} onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -439,7 +465,7 @@ export default function PresensiHarianPage() {
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={!ready || isSaving}
+                              disabled={!ready || isSaving || saveUncertain}
                               onClick={() => openUploadModal(siswa.nis)}
                               className="h-8 px-2.5 text-xs gap-1.5 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
                             >

@@ -2,8 +2,8 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const endpoint='https://script.google.com/macros/s/AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q/exec';
 const sessionPath=path.join(os.tmpdir(),'presensi-gauntlet-session.json');
-async function request(payload,post=true){
- const response=await fetch(post?endpoint:endpoint+'?'+new URLSearchParams(payload),{...(post?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)}:{}),signal:AbortSignal.timeout(120000)});
+async function request(payload,post=true,timeoutMs=120000){
+ const response=await fetch(post?endpoint:endpoint+'?'+new URLSearchParams(payload),{...(post?{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)}:{}),signal:AbortSignal.timeout(timeoutMs)});
  if(!response.ok)throw Error('HTTP '+response.status);
  return response.json();
 }
@@ -44,6 +44,26 @@ async function request(payload,post=true){
    const corrected=await request({...payload,attendances:[{...payload.attendances[0],status_presensi:'HADIR'}]});
    if(corrected.status!=='success'||(await read()).data.length!==0)throw Error('Correction failed');
    console.log(JSON.stringify({suite,status:'PASS',simulatedPostCommitReplyFailure:true,retryDuplicateLogs:0,remainingAfterCorrection:0}));continue;
+  }
+  if(suite==='timeoutBarrier'){
+   const prepared=await request({action:'getQaResult',suite:'uiPrepare',token},false);
+   const pupil=prepared.data?.result?.pupils?.[0];if(!pupil)throw Error('UI fixture unavailable');
+   const date='2026-10-12',payload={action:'saveAttendance',token,date,attendances:[{nis:pupil.nis,kelas:pupil.kelas,status_presensi:'SAKIT'}],test_delay_ms:4000};
+   let saveOutcome;
+   const save=request(payload,true,700).then(result=>{saveOutcome={status:'responded',result};},error=>{saveOutcome={status:'timed-out',name:error.name};});
+   let active=null;
+   for(let attempt=0;attempt<40;attempt++){
+    await new Promise(resolve=>setTimeout(resolve,100));
+    const state=await request({action:'getQaResult',suite:'timeoutBarrier',token},false);
+    if(state.data?.nis===pupil.nis){active=state.data;break;}
+   }
+   if(!active)throw Error('Delayed save never exposed its in-lock marker');
+   const started=Date.now(),fresh=await request({action:'getAttendancePageData',token,tingkat:'X',date,fresh:'true',profile:'true'},false),freshElapsedMs=Date.now()-started;
+   await save;
+   if(saveOutcome?.status!=='timed-out')throw Error('Expected browser request timeout while backend holds its write lock');
+   const saved=fresh.data?.logs?.filter(row=>row.nis===pupil.nis)||[];
+   if(fresh.status!=='success'||fresh.profile?.lockWaitMs<1500||saved.length!==1||saved[0].status_presensi!=='SAKIT')throw Error('Fresh read did not wait for and observe the committed write');
+   console.log(JSON.stringify({suite,status:'PASS',clientTimedOut:true,backendContinuedAfterTimeout:true,freshWaitedOnWriteLock:true,freshElapsedMs,lockWaitMs:fresh.profile.lockWaitMs,committedRows:saved.length,statusPresensi:saved[0].status_presensi}));continue;
   }
   if(suite==='verifyClean'){
    const prepared=await request({action:'getQaResult',suite:'uiPrepare',token},false);

@@ -155,7 +155,13 @@ function routeRequest_(p, post) {
     };
     const fn = (post ? writes : reads)[p.action];
     if (!fn) throw Error('Action tidak dikenali.');
-    if (!post) return fn(p);
+    if (!post) {
+      if (p.action !== 'getAttendancePageData' || p.fresh !== 'true') return fn(p);
+      const lock = LockService.getScriptLock();
+      RequestProfile.measure('lockWaitMs', () => lock.waitLock(30000));
+      try { return fn(p); }
+      finally { lock.releaseLock(); }
+    }
     const lock = LockService.getScriptLock();
     RequestProfile.measure('lockWaitMs', () => lock.waitLock(30000));
     try {

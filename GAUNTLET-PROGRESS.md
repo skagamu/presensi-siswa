@@ -34,3 +34,29 @@ Profil akhir mengukur full summary 468 entri (467 roster + 1 sintetis), reset ha
 ## Putaran akhir: respons save hilang
 Critic mereproduksi status lama kembali setelah server sudah commit tetapi respons gagal, lalu pengguna berpindah kelas. Frontend kini meminta data otoritatif dengan `fresh=true` saat pindah kelas setelah kegagalan save. Jika refresh ikut gagal, loaded key dihapus dan tombol Simpan tetap disabled dengan pesan error; refresh berhasil memulihkan status dan tautan bukti server. Retry langsung di kelas yang sama tetap mempertahankan draft. Tes regresi mencakup commit IZIN+bukti, respons gagal, refresh gagal, refresh ulang berhasil, lalu save tanpa upload ulang.
 Perbandingan buta A/B di atas mendahului patch akhir ini; patch akhir diperiksa critic frontend secara terpisah. Fresh GET hanya menjamin rekonsiliasi write yang sudah commit; timeout ketika write masih berjalan dapat berlomba dengan GET dan belum diuji sebagai jaminan transaksi menyeluruh.
+
+## Putaran transport 404 dan timeout write — 11 Oktober 2026
+
+### Analisis dan urutan Gauntlet
+1. Pisahkan 404 deployment URL langsung dari 404 sesudah ContentService redirect; catat status/host/redirect tanpa token atau query sensitif. Jangan retry semua error.
+2. Pertahankan retry GET satu kali hanya untuk 404 final pada URL sekali-pakai `script.googleusercontent.com`; POST tetap single-attempt.
+3. Setelah save berstatus ambigu, bekukan perubahan roster dan simpan payload untuk retry yang sama. Rekonsiliasi memakai GET fresh yang menunggu ScriptLock write; gagal lock berarti gagal tertutup, bukan memakai snapshot stale.
+4. Uji kasus identik pada baseline dan kandidat, lanjutkan build/lint/typecheck, lalu uji HTTP di spreadsheet TEST dengan NIS sintetis.
+5. Bersihkan data uji dan endpoint sementara, pulihkan deployment TEST bersih, dan uji lagi bahwa endpoint QA tidak dapat dipanggil. Produksi tidak masuk eksperimen.
+
+### Mengapa 404 belum punya akar penyebab definitif
+Riwayat runner menyimpan `GET GAS gagal HTTP 404` (v16), tetapi tidak merekam apakah status berasal dari URL `/exec` atau dari URL akhir sesudah redirect. Apps Script ContentService memang mengalihkan output ke URL `script.googleusercontent.com` sekali-pakai; ini membuat 404 target redirect yang usang/gagal diikuti menjadi kandidat penyebab, tetapi bukti lama tidak cukup untuk memastikan itulah kejadian yang terjadi. Retry GET generik sebelumnya juga tidak mencegahnya. Dokumentasi resmi: [Apps Script Content Service](https://developers.google.com/apps-script/guides/content).
+
+### Perubahan dan verifikasi
+- Frontend GET memakai `cache: no-store`, mencatat action/status/host/redirect/durasi secara tersanitasi, dan hanya mengulang sekali bila respons sudah redirect dan host akhirnya `script.googleusercontent.com` dengan HTTP 404. Deployment URL langsung 404, 403, network error, serta semua POST tidak diulang.
+- Backend fresh GET `getAttendancePageData` sekarang mengambil ScriptLock yang sama dengan write. Frontend membekukan perubahan status/bukti ketika save timeout, menyediakan pemeriksaan fresh, dan retry menggunakan payload identik.
+- Baseline-vs-kandidat: tes API/lock/keadaan ambigu yang sama gagal pada baseline dan lulus kandidat. Kandidat akhir: `npm test` 9/9, typecheck lulus, static build TEST 10 rute lulus, syntax GAS/runner dan diff check lulus. Lint 0 error, 13 warning lama. Next.js memperingatkan dukungan React 18 akan dihapus pada Next 17.
+- GAS TEST: backend sumber bersih dengan lock barrier aktif di Web App v27. Uji v26 sementara menunggu lock sebelum save selama 4 detik; client fetch timeout pada 700 ms, server melanjutkan dan commit satu baris SAKIT, GET fresh menunggu 4.554 ms pada lock (7.170 ms total) dan mengembalikan tepat satu baris. Uji ini membuktikan server request berlanjut setelah client timeout untuk kasus lock yang sudah diambil.
+- Regresi live di v24: gauntlet 15 checks, regression 26 checks, format 7, retry tanpa duplikasi, 3 kelas/3 pengguna/6 request menghasilkan tepat 3 log, serta profil GAS/Sheets PASS. Profil sampel: summary fresh/cache 1.641/134 ms; detail 1.827/129 ms; attendance page 975/120 ms; save 2.214 ms route. Bukan benchmark p95 atau klaim percepatan.
+- GET anonim ke deployment bersih v27: 20/20 menghasilkan HTTP 200, redirect ke `script.googleusercontent.com`, payload aplikasi `UNAUTHORIZED`. Ini smoke test transport terbatas; 404 historis tidak terulang dalam sampel ini, tidak membuktikan tidak akan terjadi lagi.
+- Cleanup live PASS: dua pupil sintetis dihapus, 10 cek memastikan tak ada roster/log/kasus/alert/arsip uji, token API logout dan file sementara dihapus. Deployment akhir v27 tanpa hook QA; `getQaResult`/`runTestSuite` terautentikasi kembali menjawab `Action tidak dikenali.`
+
+### Batas dan keputusan
+Retry bersyarat adalah pemulihan sementara, bukan penghilangan gangguan 404. Jika 404 berulang, ambil diagnostik `[BK_API]` (hanya host/status/redirect) dan Apps Script Executions; jika direct `/exec` konsisten 404, periksa deployment/akses/URL, bukan retry. Untuk menghilangkan ketergantungan redirect ContentService, tahap arsitektur berikutnya ialah API stabil (mis. Cloud Run/Functions) dengan CORS, autentikasi, dan secret yang dirancang tersendiri.
+
+Fresh GET menunggu penulis GAS yang sudah mengambil ScriptLock; penulis di luar script (edit manual Sheet atau integrasi lain) tidak termasuk. Uji live memberi jeda di dalam handler setelah lock diperoleh, lalu memastikan commit sesudah client timeout. Belum disimulasikan pembatalan jaringan nyata di browser atau beban banyak ratusan pengguna. Produksi/GitHub tidak diubah.

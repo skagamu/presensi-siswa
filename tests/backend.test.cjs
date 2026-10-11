@@ -21,13 +21,15 @@ let uploads = 0,
   failResolutionArchive = false,
   failNthUpload = 0,
   locked = false,
+  writerInFlight = false,
+  lockBarrierWaits = 0,
   lastFolder,
   nextFileId = 1;
 const driveFiles = new Map();
 const props = { SPREADSHEET_ID: 'TEST_SHEET' }, cache = {};
 const sheet = name => ({
   getDataRange: () => ({
-    getValues: () => { sheetReads[name] = (sheetReads[name] || 0) + 1; return tables[name].map(r => [...r]); }
+    getValues: () => { assert.equal(writerInFlight, false, 'sheet read must wait until the simulated writer releases its lock'); sheetReads[name] = (sheetReads[name] || 0) + 1; return tables[name].map(r => [...r]); }
   }),
   getLastRow: () => tables[name].length,
   getRange: (row, col, n = 1, m = 1) => ({
@@ -79,7 +81,7 @@ const ctx = vm.createContext({
   },
   LockService: {
     getScriptLock: () => ({
-      waitLock: () => locked = true,
+      waitLock: () => { if (writerInFlight) { tables.LogPresensi.push(['ATT-LATE', '2026-10-08', '001', 'Ani', 'X A', 'SAKIT', false, 'https://drive.google.com/file/d/committed/view', '2026-10-09 12:00:00']); writerInFlight = false; lockBarrierWaits++; } locked = true; },
       releaseLock: () => locked = false
     })
   },
@@ -564,6 +566,7 @@ function resetBackendFixture() {
   props.AUTH_SALT = 'transaction-test-salt'; props.SPREADSHEET_ID = 'TEST_SHEET';
   uploads = 0; failUpload = false; failLogWrite = false; failAlertWrite = false;
   failResolutionArchive = false; failNthUpload = 0; locked = false; lastFolder = undefined;
+  writerInFlight = false; lockBarrierWaits = 0;
   nextFileId = 1; driveFiles.clear();
   token = call('login', { username: 'admin', password: 'secret' }, true).data.token;
 }
@@ -606,6 +609,30 @@ test('attendance page combines and caches one authorized grade/date payload', ()
   assert.equal(afterWrite.profile.cache, 'miss');
   assert.equal(afterWrite.data.logs.length, 1);
   assert.equal(afterWrite.data.logs[0].nis, '001');
+});
+test('fresh attendance read waits for in-flight save and returns the committed row', () => {
+  resetBackendFixture();
+  writerInFlight = true;
+  const response = call('getAttendancePageData', { token, tingkat: 'X', date: '2026-10-08', fresh: 'true', profile: 'true' });
+  assert.equal(response.status, 'success');
+  assert.equal(lockBarrierWaits, 1);
+  assert.equal(response.profile.lockWaitMs, 0);
+  assert.equal(response.data.logs.length, 1);
+  assert.equal(response.data.logs[0].status_presensi, 'SAKIT');
+  assert.equal(response.data.logs[0].link_bukti_izin, 'https://drive.google.com/file/d/committed/view');
+  assert.equal(locked, false, 'fresh read must release the shared write lock');
+});
+test('fresh attendance read fails closed when the writer lock cannot be acquired', () => {
+  resetBackendFixture();
+  const before = { ...sheetReads };
+  const original = ctx.LockService.getScriptLock;
+  ctx.LockService.getScriptLock = () => ({ waitLock: () => { throw Error('Script lock timed out'); }, releaseLock: () => {} });
+  try {
+    const response = call('getAttendancePageData', { token, tingkat: 'X', date: '2026-10-08', fresh: 'true' });
+    assert.equal(response.status, 'error');
+    assert.equal(response.message, 'Script lock timed out');
+    assert.deepEqual(sheetReads, before, 'must not return a potentially stale snapshot without the lock');
+  } finally { ctx.LockService.getScriptLock = original; }
 });
 test('attendance save profile measures lock, attendance and alert work', () => {
   resetBackendFixture();

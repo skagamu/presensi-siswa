@@ -12,6 +12,7 @@ code=code.replace(auth,auth+`
     if (p.action === 'runTestSuite' || p.action === 'getQaResult') {
       if (!(${guard})) throw Error('Hanya script TEST.');
       const suites={uiPrepare:prepareCopyUiGauntlet,uiCleanup:cleanupCopyUiGauntlet,gauntlet:runCopyGauntletRegression,profile:runCopyPerformanceProfile,regression:runCopyRegression,formats:runCopyFileFormatRegression,retry:runCopyRetryRegression,multiclass:runCopyMultiClassRegression};
+      if(!post && p.action==='getQaResult' && p.suite==='timeoutBarrier') return ResponseHelper.success(JSON.parse(PropertiesService.getScriptProperties().getProperty('QA_TIMEOUT_ACTIVE')||'null'));
       if(!suites[p.suite]) throw Error('Suite tidak dikenal.');
       const props=PropertiesService.getScriptProperties(),key='QA_RESULT_'+p.suite;
       if(!post && p.action==='getQaResult') return ResponseHelper.success(JSON.parse(props.getProperty(key)||'null'));
@@ -21,7 +22,13 @@ code=code.replace(auth,auth+`
       catch(error){props.setProperty(key,JSON.stringify({status:'ERROR',message:error.message,finished:Date.now()}));throw error;}
     }`);
 assert(code.includes('      return fn(p);\n    } finally {'));
-code=code.replace('      return fn(p);\n    } finally {',`      const response=fn(p);
+code=code.replace('      return fn(p);\n    } finally {',`      const qaPupils=JSON.parse(PropertiesService.getScriptProperties().getProperty('QA_UI_GAUNTLET')||'[]');
+      if(p.action==='saveAttendance' && p.test_delay_ms && (${guard}) && p.attendances?.length && p.attendances.every(student=>qaPupils.some(pupil=>pupil.nis===String(student.nis)))) {
+        PropertiesService.getScriptProperties().setProperty('QA_TIMEOUT_ACTIVE',JSON.stringify({nis:p.attendances[0].nis,started:Date.now()}));
+        Utilities.sleep(Math.min(5000,Math.max(0,Number(p.test_delay_ms)||0)));
+        PropertiesService.getScriptProperties().deleteProperty('QA_TIMEOUT_ACTIVE');
+      }
+      const response=fn(p);
       if(p.test_response_loss && (${guard}) && p.attendances?.every(s=>String(s.nis).startsWith('997') || JSON.parse(PropertiesService.getScriptProperties().getProperty('QA_UI_GAUNTLET')||'[]').some(pupil=>pupil.nis===String(s.nis)))) throw Error('SIMULATED_RESPONSE_LOSS_AFTER_COMMIT');
       return response;
     } finally {`);

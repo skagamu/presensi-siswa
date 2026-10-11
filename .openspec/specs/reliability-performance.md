@@ -33,6 +33,13 @@ Baca hanya tab tingkat terpilih; gunakan satu handle spreadsheet per eksekusi GA
 - Jika pemeriksaan referensi sheet gagal, cleanup dilewati dan dicatat agar sistem tidak menghapus file yang mungkin sudah direferensikan.
 - Kegagalan setelah arsip penyelesaian tercatat dipulihkan lewat retry; arsip/file dipertahankan sampai status alert direkonsiliasi.
 
+## GAS 404 dan timeout saat presensi
+- GET memakai `cache: no-store`; satu retry 750 ms hanya untuk HTTP 404 yang sudah mengikuti redirect ContentService dan berakhir di `script.googleusercontent.com`. 403, 404 pada deployment URL langsung, error jaringan, dan seluruh POST tidak diulang otomatis. Diagnostik mencatat action, status, host, redirect, dan elapsed time tanpa URL/query/token.
+- Setelah timeout/response save tidak diketahui, UI mengunci edit roster dan menawarkan pemeriksaan status. Save ulang pada pilihan yang sama hanya mengirim payload persis yang mungkin sudah diproses; perubahan pilihan harus direkonsiliasi dahulu.
+- `getAttendancePageData?fresh=true` mengambil ScriptLock yang sama dengan mutasi, baru membaca Sheets setelah mutasi yang memegang lock selesai. Jika lock gagal didapat, endpoint mengembalikan error dan UI tidak boleh menganggap snapshot itu segar.
+- Jaminan lock berlaku untuk mutasi GAS pada script yang sama dan berjalan sesudah lock diambil. Edit manual Sheets atau penulis luar script tidak terserialisasi; request yang timeout sebelum backend mengambil lock masih bergantung pada urutan antrean.
+- Validasi: simulasi 404 terarah, POST single-attempt, uji lock unit, serta uji HTTP TEST yang memutus client request sebelum backend menjalankan save, menahan lock, melanjutkan commit, dan memeriksa GET fresh.
+
 
 ## Penghapusan portal orang tua
 Portal dikelola di repo lain. Hapus route portal, link login, pengecualian auth/layout, helper API, serta endpoint publik/kode wali dari aplikasi BK. Skema Sheets tetap; data siswa/presensi tidak dihapus. Komponen BK tetap memakai Button, Dialog, Table, Select yang tersedia. Validasi endpoint portal ditolak, sesi BK tetap wajib, TypeScript dan static export lulus.
