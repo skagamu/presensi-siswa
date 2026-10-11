@@ -14,6 +14,14 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 - Backup sebelum rilis dan SHA-256: `________________`
 - Rollback frontend/backend disiapkan oleh: `________________`
 
+## Status saat dicek — 11 Oktober 2026
+
+- **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 6 commit di depan dan 0 di belakang `origin/main`; belum dipush.
+- Daftar repository Actions variables saat ini tidak menampilkan `NEXT_PUBLIC_GAS_API_URL`. Workflow Pages membutuhkannya untuk build; tanpa nilai produksi yang benar, build berhenti.
+- Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru `eb8596d`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
+- Pemeriksaan `clasp deployments` menunjukkan GAS produksi v29. Verifikasi lagi saat rilis.
+- Backup spreadsheet/source yang tersedia bertanggal 10 Oktober; buat backup segar sebelum cutover. Uji rollback auth/password-hash di salinan: dokumen rollback yang ada mencatat kompatibilitas v29 sebagai risiko.
+
 ## A. Sebelum rilis
 
 - [ ] **Branch dan commit** — tinjau seluruh diff, commit terpilih sama dengan yang sudah diuji; working tree bersih.
