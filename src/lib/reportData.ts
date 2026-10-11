@@ -5,6 +5,11 @@ export function jakartaToday(now = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
   return ["year", "month", "day"].map(type => parts.find(part => part.type === type)!.value).join("-");
 }
+export function isSchoolDayWib(date: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const day = new Date(`${date}T12:00:00+07:00`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === date && ![0, 6].includes(day.getUTCDay());
+}
 export function cappedRange(start: string, end: string): [string, string] {
   if (start > end) [start, end] = [end, start];
   const limit = new Date(`${start}T00:00:00`);

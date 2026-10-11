@@ -1,4 +1,14 @@
-# Handoff Presensi Siswa BK — 10 Oktober 2026
+# Handoff Presensi Siswa BK — 11 Oktober 2026
+
+## Status gauntlet terbaru (menggantikan status lama di bawah)
+Backend TEST aktif v23. Temuan gauntlet diperbaiki dengan builder/critic terpisah dan judge anonim memilih kandidat. 8/8 suite lokal, TypeScript, static build TEST dan lint 0 error lulus. Google live: gauntlet 15 checks, regresi 26 checks, retry, multikelas, dan fault respons setelah commit lulus. UI sintetis save/proof/class-switch dan Bank Kasus lulus; data fixture dibersihkan dan 10 GET cleanup lulus. Endpoint QA sementara sudah dihapus dan penolakannya diverifikasi. Rincian serta batas: GAUNTLET-PROGRESS.md. 404 ContentService tetap belum terjamin selesai; latensi browser masih 3–7 detik pada sampel sebelum cleanup dioptimalkan. Produksi tidak disentuh.
+Paket produksi 10 Oktober belum mencakup perubahan gauntlet; perbarui paket sebelum proposal rilis. Jangan pakai bundle build TEST sebagai frontend produksi.
+
+## Perbaikan worktree lanjutan (riwayat)
+- Endpoint frontend sekarang tidak memiliki fallback URL. Tanpa `NEXT_PUBLIC_GAS_API_URL`, request berhenti dengan pesan jelas dan static build ditolak. GitHub Pages membaca URL dari repository variable dengan nama yang sama; pemeriksaan GitHub menemukan variable itu belum disetel, jadi isi dengan endpoint produksi yang benar sebelum merge ke `main`.
+- Dashboard akhir pekan tidak lagi menampilkan nol kehadiran/absen seolah-olah presensi sekolah berjalan; kartu menampilkan “—” dan memberi pesan bahwa presensi hanya dicatat Senin–Jumat.
+- Presensi kini memuat roster+log tanggal lewat satu request; pemilihan kelas tidak meminta ulang. Backend memberi cache 30 detik yang terikat database/revisi dan invalidasi mutasi, serta metrik waktu lock/baca/tulis saat save.
+- Backend TEST deployment v17 berisi rekonsiliasi alert satu lintasan. Runner langsung `route()` PASS sebelum/sesudah edit, tetapi satu sampel sesudah edit lebih lambat pada semua aksi, termasuk cache hit; variansi waktu GAS kemungkinan berpengaruh dan dampak algoritme belum terbukti. GET frontend retry sekali 750 ms hanya best-effort untuk 404 ContentService. Produksi tidak disentuh.
 
 Dokumen ini adalah acuan status terbaru. REPAIR-STATUS.md, TEST-PLAN.md, dan beberapa bagian TEST-RESULTS.md mencatat sejarah; keputusan terbaru di sini mengesampingkan informasi lama tentang portal/kode wali dan tes yang dahulu tertunda.
 
@@ -7,7 +17,7 @@ Dokumen ini adalah acuan status terbaru. REPAIR-STATUS.md, TEST-PLAN.md, dan beb
 - Repository: https://github.com/skagamu/presensi-siswa.git
 - Branch: `codex/presensi-repairs`.
 - BASELINE: `fdd13e6f66a3b3af94b23bb25c57c4b074db1cec`; commit perbaikan lokal tercatat di `git log` setelah paket review final dibuat.
-- Perbaikan disimpan di commit lokal terbaru pada branch `codex/presensi-repairs`; belum dipush atau dideploy produksi.
+- Commit-commit perbaikan sebelumnya ada di branch lokal `codex/presensi-repairs`; perubahan terbaru yang sedang divalidasi masih uncommitted. Belum dipush atau dideploy produksi.
 - Worktree `.git` mengarah ke repository induk di folder lain; jangan menyalin `.git` sendirian untuk memindahkan proyek ke komputer lain. Snapshot source tidak bergantung pada path Git induk.
 - Folder Google Drive bukan source aktif localhost. Sebelumnya asisten keliru menambahkan spinner dengan delay buatan 120ms di sana; jangan menggabungkan patch itu. Overlay yang benar di worktree mengikuti request Google yang sebenarnya. Folder Documents belum diaudit atau disinkronkan.
 
@@ -23,7 +33,8 @@ npm run dev:test
 ```
 Buka http://localhost:3001/presensi-siswa. Server pada port itu masih aktif pada saat handoff; jangan membuat proses kedua di port yang sama. Pastikan proses pemilik port/cwd sebelum menghentikan atau mengganti server. Untuk pindah mesin/harness, gunakan source snapshot, Node >=20.9, `npm ci`, lalu `npm run dev:test`. `.npmrc` berisi `legacy-peer-deps=true` untuk dependency yang ada.
 
-`dev:test` dan `build:test` secara eksplisit menunjuk endpoint TEST. Alternatif: salin `.env.example` ke `.env.local`, lalu `npm run dev -- --port 3001`. Variabel NEXT_PUBLIC dibaca saat dev/build; restart server setelah mengganti backend. Jangan mengandalkan `npm run dev` tanpa env karena API memiliki URL fallback berbeda.
+`dev:test` dan `build:test` secara eksplisit menunjuk endpoint TEST. Alternatif: salin `.env.example` ke `.env.local`, lalu `npm run dev -- --port 3001`. Variabel NEXT_PUBLIC dibaca saat dev/build; restart server setelah mengganti backend. API tidak punya endpoint fallback: request gagal jelas bila variabel tidak disetel. Build mewajibkan `NEXT_PUBLIC_GAS_API_URL` agar bundle statis tidak diam-diam memakai backend yang salah.
+Workflow GitHub Pages mengambil URL dari repository variable `NEXT_PUBLIC_GAS_API_URL`; isi dengan endpoint produksi sebelum merge ke `main`. Jika kosong, build berhenti aman dan deployment tidak berjalan.
 
 ```bash
 npm test
@@ -38,7 +49,7 @@ Jangan menjalankan next start untuk static export; dev memakai next dev. Untuk p
 - Apps Script TEST: `1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH`.
 - Editor: https://script.google.com/home/projects/1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH/edit
 - Deployment ID: `AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q`.
-- Versi TEST aktif: **13**, perbaikan target spreadsheet aman, lampiran presensi, dan retry kasus.
+- Versi Web App TEST aktif: **23**, perbaikan gauntlet tervalidasi, tanpa endpoint QA sementara. Runner editor terbaru ada di HEAD Apps Script TEST; retry GET tetap best-effort.
 - Endpoint: https://script.google.com/macros/s/AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q/exec
 - Source backend: `clasp_backend/Kode.js`. **clasp_backend/.clasp.json mengarah ke script lama/produksi**, jangan push dari direktori itu untuk pekerjaan TEST.
 - Konfigurasi staging TEST permanen: `handoff/gas-test/.clasp.json` dan `appsscript.json`. Source backend/runner tidak diduplikasi di sana. Buat staging lalu salin versi terbaru:
@@ -75,7 +86,7 @@ Session server, hash password, expiry/logout/throttle; endpoint setup publik dih
 
 ## Bukti verifikasi dan batasnya
 - Pembaruan 10 Okt 12:40 WIB: Google TEST regression PASS 23, retry sesudah respons hilang PASS tanpa duplikasi, konkurensi 3 kelas/3 sesi/6 request PASS (3 log akhir), dan format bukti PASS 7. QA runner sementara sudah dihapus; TEST kembali ke backend bersih v12. Produksi tetap versi 29.
-- Pembaruan 10 Okt 16:45 WIB: GAS TEST deployment v13 berisi source perbaikan dan runner `runCopyRegression`, `runCopyConcurrencyRegression`, dan lainnya. `clasp run` gagal dengan `NOT_FOUND`, jadi runner live v13 belum dijalankan; jalankan dari editor Apps Script TEST. Local regressions, typecheck, lint, dan static build lulus. Produksi tetap versi 29.
+- Pembaruan 11 Okt: GAS TEST Web App v16 berisi endpoint gabungan presensi/cache. `clasp run` menjawab `NOT_FOUND`; runner dijalankan dari editor Apps Script. Produksi versi 29 tetap tidak disentuh.
 - Profil UI roster nyata 467 siswa: summary dingin 4.063ms/5 pembacaan Sheets; detail dingin 3.895ms/4 pembacaan; detail hangat 1.499ms/0 pembacaan; paint dingin 4.267ms dan hangat 1.910ms. Latensi dingin masih terasa; hanya satu siswa/satu sesi.
 - Backup baca-saja produksi terverifikasi 16 sheet, SHA-256 ada di TEST-RESULTS.md, di folder privat Documents; source GAS production v29 tersimpan di sampingnya. Tidak ada write produksi.
 - Validasi final: 7/7 suite Node, typecheck, static build 10 rute lulus; lint 0 error/14 warning.
@@ -99,3 +110,15 @@ Session server, hash password, expiry/logout/throttle; endpoint setup publik dih
 6. Sebelum GAS dikirim ke produksi, pastikan Script Property `SPREADSHEET_ID` sudah diisi dengan ID sheet produksi yang benar; backend sekarang gagal tertutup bila properti ini kosong.
 
 Tes yang sudah lulus tidak perlu dijalankan ulang kecuali file terkait berubah. Tidak ada persentase kelulusan tunggal: gerbang yang diminta sudah lulus, sementara latensi dingin dan batas simulasi offline tercatat di atas.
+
+- Profil GAS TEST sebelum optimasi rekonsiliasi (11 Okt 01:41 WIB): summary 1.106 dtk fresh (3 baca Sheets, 543 ms baca) vs 126 ms cache (0 baca); detail 1.068 dtk (4 baca, 625 ms) vs 132 ms cache; presensi gabungan 779 ms fresh (2 baca, 414 ms) vs 126 ms cache. Save sintetis 2.542 dtk route (2.407 dtk GAS), termasuk 63 ms tunggu lock, 112 ms baca Sheets, 302 ms baca alert, dan 489 ms sinkronisasi alert. Latensi simpan tetap fokus optimasi berikutnya; hasil belum mencakup HTTP/browser.
+
+- Setelah hasil profil tersebut, algoritme rekonsiliasi alert diubah dari beberapa filter/pencarian seluruh daftar berulang menjadi satu lintasan dengan indeks level/alert selesai. `npm test` 7/7, typecheck, sintaks GAS, dan diff check lulus. Project TEST dipush dan Web App diperbarui ke v17; endpoint anonim merespons HTTP 200 `UNAUTHORIZED`. Profil pascaoptimasi sudah dijalankan: angka satu sampel lebih lambat dari baseline pada semua jenis request, termasuk cache hit, sehingga dampak optimasi belum terbukti dan perlu pengukuran berulang.
+
+- Profil sesudah optimasi (11 Okt 01:45 WIB): summary fresh 2.897 ms/cache 440 ms; detail fresh 1.961/cache 342 ms; halaman presensi fresh 1.216/cache 387 ms; save 3.401 ms route/2.862 ms GAS. Dibanding sampel 01:41, semua request memburuk, termasuk cache hits tanpa baca Sheets; save +34%, alert read 462 ms, sync 710 ms. Sampel kedua pascaedit (01:47 WIB) juga melambat: summary fresh/cache 2.454/346 ms, detail 2.715/353 ms, presensi 1.346/397 ms, save 4.133 ms (3.831 GAS; baca alert 839 ms, sync 1.174 ms). Cache hits tanpa baca Sheets pun bertahan di 346–397 ms, jadi variasi runtime/layanan tampak kuat; dua sampel belum mengisolasi efek algoritme. Performa algoritme satu lintasan tetap belum terbukti; tunggu sampel ketiga sebelum menerima atau membatalkan optimasi.
+
+- Sampel live kedua pascaoptimasi (11 Okt 01:47 WIB) konsisten lambat lintas endpoint: cache hits 344–395 ms; save 4.133 ms route / 3.831 ms GAS, alert read 839 ms, sync 1.174 ms. Variasi cache hit yang tidak membaca Sheets mendukung dugaan runtime/layanan GAS sedang lambat, tetapi sampel kecil dan sinkronisasi alert juga lebih lama; tidak cukup bukti untuk atribusi tunggal.
+
+- Sampel ketiga pascaoptimasi (11 Okt 01:49 WIB): summary 1.494/122 ms fresh/cache; detail 1.085/134 ms; presensi 680/116 ms; save 2.408 ms route/2.293 ms GAS (alertRead 411 ms, alertSync 553 ms). Median tiga sampel pascaedit: summary fresh/cache 2.454/346 ms; detail 1.961/342 ms; presensi 1.216/387 ms; save 3.401 ms route (GAS 2.862 ms). Rentang besar: save 2.408–4.133 s; cache presensi 116–397 ms. Sebelum edit hanya ada satu baseline save 2.542 s dan cache presensi 126 ms, jadi perbandingan berpasangan belum cukup untuk menilai algoritme.
+
+Patch akhir gauntlet: rekonsiliasi fresh setelah respons save gagal, termasuk refresh gagal yang harus tetap memblokir Save. Lihat GAUNTLET-PROGRESS.md untuk batas timeout/write masih berjalan.

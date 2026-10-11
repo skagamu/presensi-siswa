@@ -76,11 +76,13 @@ export function SiswaDetailModal({ siswa, isOpen, onClose }: SiswaDetailModalPro
                 <User className="w-5 h-5 text-gray-700" />
                 {siswa.nama}
               </DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm text-gray-500 mt-1">
-                NIS: <span className="font-mono font-semibold text-gray-800">{siswa.nis}</span> • Kelas:{" "}
-                <Badge variant="outline" className="font-bold text-gray-900 border-gray-300">
-                  {siswa.kelas}
-                </Badge>
+              <DialogDescription asChild className="text-xs sm:text-sm text-gray-500 mt-1">
+                <div>
+                  NIS: <span className="font-mono font-semibold text-gray-800">{siswa.nis}</span> • Kelas:{" "}
+                  <Badge variant="outline" className="font-bold text-gray-900 border-gray-300">
+                    {siswa.kelas}
+                  </Badge>
+                </div>
               </DialogDescription>
             </div>
           </div>

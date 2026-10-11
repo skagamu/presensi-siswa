@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { AlertTriangle, FileDown, RefreshCw, ArrowRight, Users, CheckCircle, XCircle, FileWarning } from "lucide-react";
 import { getDashboardStats, getBankKasus, getPeringatanKasus, resolveCase, PeringatanKasus } from "@/lib/api";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
+import { isSchoolDayWib } from "@/lib/reportData";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 interface KasusTerakhir { idKasus: string; tanggal: string; nama: string; kelas: string; pelanggaran: string; }
@@ -28,7 +29,11 @@ export default function DashboardPage() {
   const [kasusTerakhir, setKasusTerakhir] = useState<KasusTerakhir[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [chartMode, setChartMode] = useState<"weekly" | "monthly">("weekly");
+  const isSchoolDay = stats ? isSchoolDayWib(stats.tanggal) : false;
 
+
+  const uploadPending = useRef(false);
+  const priorityAlerts = alerts?.filter((alert, index, all) => all.findIndex(item => item.nis === alert.nis) === index).slice(0, 3);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
@@ -38,7 +43,11 @@ export default function DashboardPage() {
       ]);
       for (const res of [resStats, resAlerts, resKasus]) if (res.status !== "success") throw new Error(res.message || "Gagal memuat dashboard.");
       if (resStats.data) setStats(resStats.data);
-      if (resAlerts.data) setAlerts([...resAlerts.data].sort((a, b) => b.tingkat_kumulatif - a.tingkat_kumulatif));
+      if (resAlerts.data) setAlerts([...resAlerts.data].sort((a, b) =>
+        b.tingkat_kumulatif - a.tingkat_kumulatif ||
+        (Date.parse(b.waktu_dibuat) || 0) - (Date.parse(a.waktu_dibuat) || 0) ||
+        b.total_hari_absen - a.total_hari_absen || a.id_peringatan.localeCompare(b.id_peringatan)
+      ));
       if (resKasus.data) setKasusTerakhir(resKasus.data.slice(-5).reverse().map(k => ({ idKasus: k.id_kasus, tanggal: k.tanggal, nama: k.nama, kelas: k.kelas, pelanggaran: k.jenis_pelanggaran })));
     } catch (err) {
       toast.error(`Error mengambil data: ${err instanceof Error ? err.message : "Koneksi gagal"}`);
@@ -68,6 +77,7 @@ export default function DashboardPage() {
   const handleUploadResolution = async (alert: PeringatanKasus, e: React.FormEvent<HTMLFormElement>) => {
     const idPeringatan = alert.id_peringatan;
     e.preventDefault();
+    if (uploadPending.current) return;
     const form = e.currentTarget;
     const fileInput = form.querySelector(`input[type="file"]`) as HTMLInputElement | null;
     const notesInput = form.querySelector(`textarea`) as HTMLTextAreaElement | null;
@@ -83,15 +93,17 @@ export default function DashboardPage() {
       if (!validation.valid) {
         return toast.error(validation.error || "File tidak valid.");
       }
+      uploadPending.current = true;
+      setIsUploading(idPeringatan);
       try {
         fileBase64 = await fileToBase64(file);
         fileName = file.name;
       } catch {
+        uploadPending.current = false;
+        setIsUploading(null);
         return toast.error("Gagal membaca file.");
       }
     }
-
-    setIsUploading(idPeringatan);
 
     try {
       const res = await resolveCase({
@@ -106,12 +118,12 @@ export default function DashboardPage() {
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
-        if (alerts) setAlerts(alerts.filter(a => a.id_peringatan !== idPeringatan));
+        setAlerts(current => current?.filter(a => a.id_peringatan !== idPeringatan) || null);
       } else {
         toast.error("Gagal resolve: " + res.message);
       }
     } catch { toast.error("Gagal mengirim perintah resolusi."); }
-    finally { setIsUploading(null); }
+    finally { uploadPending.current = false; setIsUploading(null); }
   };
 
   return (
@@ -128,6 +140,7 @@ export default function DashboardPage() {
       </div>
 
       {/* TOP WIDGET STATS */}
+      {stats && !isSchoolDay && <p role="status" className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-800">Hari ini bukan hari sekolah. Presensi hanya dicatat Senin–Jumat.</p>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-3">
         <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-2 min-h-[92px] md:min-h-[104px]">
           <div className="flex flex-row items-center justify-between">
@@ -142,7 +155,7 @@ export default function DashboardPage() {
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</h3>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
-          <div className="text-xl md:text-2xl font-semibold text-green-600">{stats ? stats.hadirHariIni : "..."}</div>
+          <div className="text-xl md:text-2xl font-semibold text-green-600">{stats ? (isSchoolDay ? stats.hadirHariIni : "—") : "..."}</div>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-md overflow-hidden shadow-sm flex flex-col p-3 md:p-4 gap-1 min-h-[92px] md:min-h-[104px]">
@@ -151,8 +164,8 @@ export default function DashboardPage() {
             <XCircle className="w-4 h-4 text-red-500" />
           </div>
           <div className="flex flex-col items-start gap-1 mt-1 md:flex-row md:items-end md:gap-2">
-            <div className="text-xl md:text-2xl font-semibold text-red-600 leading-none">{stats ? stats.absenHariIni : "..."}</div>
-            <span className="text-[10px] sm:text-xs text-muted-foreground md:pb-0.5">{stats ? `S:${stats.breakdown.SAKIT} I:${stats.breakdown.IZIN} A:${stats.breakdown.ALPHA}` : ""}</span>
+            <div className="text-xl md:text-2xl font-semibold text-red-600 leading-none">{stats ? (isSchoolDay ? stats.absenHariIni : "—") : "..."}</div>
+            <span className="text-[10px] sm:text-xs text-muted-foreground md:pb-0.5">{stats && isSchoolDay ? `S:${stats.breakdown.SAKIT} I:${stats.breakdown.IZIN} A:${stats.breakdown.ALPHA}` : ""}</span>
           </div>
         </div>
 
@@ -161,8 +174,8 @@ export default function DashboardPage() {
             <h3 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">% Kehadiran</h3>
             <CheckCircle className="w-4 h-4 text-green-500" />
           </div>
-          <div className="text-xl md:text-2xl font-semibold text-gray-900">{stats ? `${stats.persentaseKehadiran}%` : "..."}</div>
-          <div className={`w-fit text-[10px] font-bold px-2 py-0.5 rounded-full ${stats && stats.persentaseKehadiran < 90 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Tgt &gt; 95%</div>
+          <div className="text-xl md:text-2xl font-semibold text-gray-900">{stats ? (isSchoolDay ? `${stats.persentaseKehadiran}%` : "—") : "..."}</div>
+          {isSchoolDay && <div className={`w-fit text-[10px] font-bold px-2 py-0.5 rounded-full ${stats && stats.persentaseKehadiran < 90 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Tgt &gt; 95%</div>}
         </div>
       </div>
 
@@ -186,7 +199,7 @@ export default function DashboardPage() {
               ) : alerts && alerts.length === 0 ? (
                 <div className="p-6 text-center bg-green-50 text-green-700 border border-green-200 rounded-md font-medium text-sm">Tidak ada Active Alert saat ini. Sekolah kondusif!</div>
               ) : (
-                alerts?.slice(0, 3).map((alert) => {
+                priorityAlerts?.map((alert) => {
                   const isCritical = alert.tingkat_kumulatif >= 3;
                   return (
                     <div key={alert.id_peringatan} className={`flex flex-col md:flex-row md:items-center justify-between px-3 py-3 md:px-4 rounded-md border transition-all gap-3 md:gap-4 bg-white shadow-sm ${isCritical ? 'border-l-[4px] border-l-red-500 border-red-200' : 'border-l-[4px] border-l-orange-400 border-orange-200'}`}>
@@ -225,7 +238,7 @@ export default function DashboardPage() {
                                 </div>
                                 <div className="space-y-2"><Label htmlFor={`notes-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                               </div>
-                              <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                              <DialogFooter><Button type="submit" disabled={isUploading !== null} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                             </form>
                           </DialogContent>
                         </Dialog>

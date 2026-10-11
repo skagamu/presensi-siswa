@@ -1,4 +1,13 @@
-# Hasil pengujian — 10 Oktober 2026
+# Hasil pengujian — diperbarui 11 Oktober 2026
+
+## Perubahan performa — 11 Oktober 2026
+
+- Frontend Presensi kini memuat roster tingkat dan log tanggal dalam satu GET gabungan; pindah kelas hanya memfilter data yang sudah dimuat.
+- GET gabungan memakai cache 30 detik, dicek setelah autentikasi, terpisah per spreadsheet/revisi/tingkat/tanggal, dan invalidasi setelah operasi tulis. Tanggal akhir pekan melewati pembacaan log.
+- Profil save mencatat antrean lock, baca/tulis log presensi, sinkronisasi alert, serta baca/tulis alert. Logger frontend development menyertakan waktu HTTP dan metrik GAS tanpa token atau identitas.
+- Web App TEST aktif v17 dengan optimasi rekonsiliasi alert. Retry runner v16 750 ms tetap gagal HTTP 404 pada GET gabungan; retry browser tetap best-effort dan POST tidak retry otomatis.
+- Validasi lokal terbaru: `npm test` 7/7, `npm run typecheck`, `npm run build:test` (10 rute), lint file API, dan pemeriksaan sintaks runner lulus. Profil GAS langsung sudah dijalankan sebelum/sesudah optimasi; satu sampel pascaedit lebih lambat pada semua aksi, hasil browser/E2E dan peningkatan aktual belum terbukti.
+- Produksi tidak disentuh. Perubahan worktree terbaru belum di-commit.
 
 ## Pembaruan live terkini — 10 Oktober 2026, 12:40 WIB
 
@@ -31,6 +40,9 @@ Test backend yang sebelumnya gagal ternyata memiliki fixture/assertion yang sala
 - Runner Drive tambahan hari ini **PASS 7 checks**: PDF/DOCX/XLSX/JPG/PNG berhasil dibuat dengan MIME yang diharapkan, file spoof ditolak, ukuran >10 MB ditolak. File uji berawalan `CODEX_FORMAT_` dipindah ke Trash pada cleanup. Office yang diuji hanya byte signature, bukan dokumen utuh yang dibuka di Word/Excel.
 - Pemeriksaan endpoint tanpa sesi hari ini mengikuti redirect GAS, lalu menjawab `UNAUTHORIZED` dalam sekitar 1.96 detik. Ini hanya memastikan penolakan akses; bukan uji latensi tindakan berautentikasi.
 - Pada 9 Oktober, uji UI sebelumnya mencatat data XI BD (15 siswa), XI AK (9), dan X AK (6); pengukuran save via runner Google 3.285–4.891 detik, `getSiswa` 1.104 detik. Sampel dan kondisi kelas tidak setara untuk klaim perbandingan sebelum/sesudah.
+- Pembaruan 10 Oktober 21:44 WIB: runner utama pada project Apps Script TEST (`1-NpiLFz...84fkH`) dan spreadsheet salinan (`16-zovx...7YRQ`) **PASS 26 checks**, eksekusi selesai, 32.259 detik. Percobaan pertama menemukan assertion runner yang terlalu mengharuskan apostrof tersimpan sebagai karakter; assertion diperbaiki agar memeriksa nilai literal dan memastikan sel tidak berisi formula. Enam save sakit 1.996–3.251 detik; save ulang 2.760 detik; koreksi HADIR 2.684 detik; save bank kasus 1.217 detik dan retry 1.231 detik; detail direktori 1.718 detik; ringkasan 1.048 detik. Pengukuran ini memanggil route GAS langsung di runner, bukan waktu browser/network deployment. Runner menuntaskan `finally` cleanup sebelum melaporkan PASS; spreadsheet yang diverifikasi adalah salinan TEST, produksi tidak disentuh.
+- Pembaruan 10 Oktober 23:00 WIB: localhost dashboard dari worktree menampilkan 467 siswa dan metrik akhir pekan “—”. Server `:3001` terbukti berjalan dari worktree; chunk frontend berisi URL deployment TEST. Saat route Presensi dibuka ulang, sesi lokal tidak tersedia dan aplikasi mengalihkan ke login. GET anonim pada URL deployment TEST **PASS** dengan `UNAUTHORIZED` (1.742 detik). Tes autentikasi browser dan runner URL terotentikasi (`runCopyConcurrencyRegression`/profil) belum selesai: Apps Script UI berpindah dari kontrol saat navigasi, sedangkan `clasp run` gagal `NOT_FOUND`. Jangan klaim hasil runner internal sebagai E2E URL.
+- Pembaruan 10 Oktober 23:10 WIB: tes terotentikasi melalui URL deployment TEST v14 **PASS**. `runCopyConcurrencyRegression`: 2 save bersamaan menghasilkan 1 log akhir dan 20 percobaan login bersamaan dibatasi menjadi 10; `runCopyRetryRegression`: POST ulang tidak menggandakan log dan koreksi HADIR menghapus log; `runCopyMultiClassRegression`: 3 kelas/3 sesi/6 request menghasilkan tepat 3 log; seluruh runner menjalankan cleanup pada data sintetis. `runCopyPerformanceProfile` memakai satu siswa sintetis: summary baru 2.713 dtk HTTP / 1.399 dtk GAS / 647 ms baca Sheets / 3 baca; summary cache 1.105 dtk HTTP / 72 ms GAS / 0 baca; detail baru 3.031 dtk HTTP / 1.631 dtk GAS / 1.119 ms baca / 4 baca; detail cache 1.586 dtk HTTP / 271 ms GAS / 0 baca. Retry runner dibatasi klaimnya ke pengiriman ulang berurutan; fault kehilangan respons setelah commit tidak diuji lewat endpoint ini. UI browser terautentikasi tetap belum diuji karena sesi localhost mengarah ke login.
 - Server localhost `:3001` sekarang diarahkan ke endpoint TEST dan memberi HTTP 200. Halaman presensi menunjukkan roster kosong untuk X AK; tidak ada save UI. Penyebabnya belum dipastikan (data roster vs sesi API), sehingga pengukuran kelas nyata belum sah.
 - Koreksi 10 Oktober 09:02 WIB: `runCopyConcurrencyRegression()` berhasil dijalankan dari editor TEST. **PASS**: dua request `saveAttendance` serentak sukses, satu log akhir tercatat (`IZIN`), eksekusi selesai. `finally` membersihkan siswa/log sintetis. Produksi tidak disentuh.
 - Fixture UI 30 siswa sintetis (6 X AK, 9 XI AK, 15 XI BD) berhasil disiapkan, lalu dibersihkan (**CLEANED 30**). Setelah reload, localhost mengalihkan ke login; tanpa sesi lokal aktif, pengukuran UI/latensi tidak dilakukan.
@@ -66,3 +78,58 @@ Gunakan hanya NIS sintetis dan folder Drive `TEST_PRESENSI_` untuk uji tulis. Ja
 
 ## 10 Oktober: verifikasi overlay dan latensi roster nyata
 Overlay live PASS untuk layar penuh, fokus Tab, Escape, blokir klik navigasi, dan pembukaan/penutupan detail. Direktori 467 entri: 5,964–7,374 detik; detail: 5,107–5,280 detik. Presensi X AK 3,044 detik, pindah tingkat XI AK 5,565 detik, pindah kelas XI BD 2,413 detik. Seluruh roster tampil dan kontrol siap. Tidak ada save absensi. Waktu mencakup overhead observasi browser; performa masih lambat. Rincian dan batas pengukuran: UI-VERIFICATION-2026-10-10.md.
+# 11 Oktober 2026 — ContentService 404 dan retry baca
+
+- Runner `runCopyPerformanceProfile` TEST v15 gagal di GET `getAttendancePageData` (ManualTest.gs:245), setelah mulai dan masuk tahap profiling presensi. `finally` runner menghapus baris siswa sintetis dan sesi sebelum keluar; request simpan belum dijalankan.
+- Deployment TEST terkonfirmasi v15, dan URL `/exec` tetap aktif (GET tanpa sesi menjawab 200 `UNAUTHORIZED`; aksi profil tanpa sesi juga menjawab 200 `UNAUTHORIZED`). Ini belum membuktikan request berautentikasi berhasil.
+- Firecrawl menemukan [Google Issue Tracker #541915738](https://issuetracker.google.com/issues/541915738): laporan intermiten sejak Agustus 2026 bahwa ContentService dapat mengembalikan 302 lalu URL echo `script.googleusercontent.com` menjawab 404 walau eksekusi GAS selesai. Laporan 21 Sep dan 8 Okt menyebut gejala berlanjut; retry GET ke URL `/exec` baru setelah jeda pernah memulihkan request. Ini temuan infrastruktur yang konsisten dengan log, bukan bukti bahwa Google sudah mengonfirmasi atau memperbaiki insiden.
+- Mitigasi: `gasGet` frontend dan GET profil runner mencoba lagi sekali setelah 750 ms hanya bila status 404. Tidak ada retry otomatis untuk POST karena respons dapat hilang setelah mutasi terjadi.
+- GAS TEST diperbarui ke deployment **v16** (`TEST retry GAS ContentService 404 reads`). Validasi sesudah perubahan: `npm test` 7/7, `npm run typecheck`, `npm run build:test`, lint `src/lib/api.ts`, pemeriksaan sintaks runner, dan `git diff --check` lulus.
+- Source HEAD TEST sekarang memiliki runner `runCopyPerformanceProfile` yang memanggil `route()` langsung untuk mengisolasi waktu GAS/Sheets dari redirect ContentService. Sudah di-push ke project Apps Script TEST tanpa membuat deployment baru; Web App tetap v16. Hasil live PASS dilaporkan 11 Okt 01:41 WIB dan rinciannya di bawah. Ini tidak mengukur HTTP/browser dan tidak menyelesaikan 404 delivery.
+
+
+## Pembaruan setelah screenshot runner 404 — 11 Oktober 2026
+
+- `runCopyPerformanceProfile` deployment v16 juga gagal `GET GAS gagal HTTP 404` pada `fetchRead`; retry sekali sesudah 750 ms tidak mengatasi gangguan. Karena itu, retry client bukan solusi yang terjamin.
+- Runner TEST diubah agar pemanggilan profil memakai `route()` langsung (bypass HTTP redirect) dan mencatat `routeMs` beserta profil internal GAS/Sheets. Runner tetap membuat/menghapus siswa sintetis dan membersihkan log/alert di `finally`.
+- Versi runner baru sudah di-push ke Apps Script TEST HEAD. Deployment Web App masih v16; `clasp deployments` sesudah push mengonfirmasi deployment TEST tetap v16. Produksi tidak disentuh.
+- Validasi lokal: sintaks runner dan `npm test` (7/7) lulus; `git diff --check` lulus. Profil route tidak mengukur delivery HTTP atau latensi browser.
+- Tindak lanjut untuk 404 yang dialami pengguna: retry GET sekali tetap dapat dipakai sebagai pemulihan sementara. Solusi yang menghilangkan ketergantungan pada redirect ContentService memerlukan penggantian host API (misalnya Cloud Run/Functions) dan penyesuaian CORS/auth; perubahan infrastruktur itu belum dilakukan.
+
+- Hasil live `runCopyPerformanceProfile` (Apps Script TEST HEAD, 11 Okt 01:41 WIB): summary 1.106 ms fresh (3 baca Sheets, 543 ms) vs 126 ms cache (0 baca); detail 1.068 ms fresh (4 baca, 625 ms) vs 132 ms cache; presensi gabungan 779 ms fresh (2 baca, 414 ms) vs 126 ms cache. Cache mengurangi waktu request sekitar 88–84% pada sampel ini. Save sintetis 2.542 ms total route / 2.407 ms GAS: tunggu lock 63 ms, baca Sheets 112 ms, baca alert 302 ms, sinkronisasi alert 489 ms, tulis presensi 4 ms dan alert 1 ms. Koreksi interpretasi: sinkronisasi alert 489 ms (~20% GAS) sudah mencakup baca alert 302 ms, sehingga keduanya tidak boleh dijumlahkan, namun sisa waktu belum dijelaskan metrik komponen. Profil hanya satu run serial pada siswa sintetis di spreadsheet TEST; bukan latensi HTTP/browser atau jaminan performa produksi.
+
+
+## Optimasi simpan alert — 11 Oktober 2026
+
+- Baseline runner live sebelum edit: simpan 2.542 ms route (2.407 ms GAS); baca alert 302 ms dan rekonsiliasi alert 489 ms.
+- Rekonsiliasi kini membentuk indeks alert selesai/aktif per NIS-level dan memproses baris alert sekali; menghapus pemindaian berulang pada daftar hasil untuk setiap siswa/level. Aturan akademik, prioritas maksimum, deduplikasi, dan alert yang sudah selesai dipertahankan.
+- Regresi backend lokal mencakup ambang tahun ajaran, koreksi HADIR, alert selesai duplikat, retry setelah write alert gagal, dan sinkronisasi kumulatif; 7/7 suite tes, typecheck, sintaks GAS, dan `git diff --check` lulus.
+- Source dipush ke project Apps Script TEST dan deployment diperbarui ke v17. GET tanpa sesi merespons HTTP 200 `UNAUTHORIZED`. Produksi tidak disentuh.
+- Profil pascaoptimasi (11 Okt 01:45 WIB): summary 2.897 ms fresh/440 cache; detail 1.961/342; presensi gabungan 1.216/387; save 3.401 ms route/2.862 ms GAS. Semua nilai lebih tinggi dari sampel 01:41, termasuk cache hits tanpa baca Sheets; save naik 34%, alertRead 462 ms, alertSync 710 ms. Satu sampel per jenis tidak membedakan variansi runtime Google dari dampak kode. Optimasi belum terbukti bermanfaat dan belum layak diklaim sebagai penurunan latensi; ukur ulang beberapa kali dengan runner sama sebelum memutuskan mempertahankan atau membatalkan perubahan.
+- Pengukuran tersebut hanya route GAS langsung, bukan HTTP/browser atau beban seluruh roster.
+
+- Sampel live kedua pascaoptimasi (11 Okt 01:47 WIB): summary 2.454 ms fresh/346 cache; detail 2.715/353; presensi gabungan 1.346/397; save 4.133 ms route/3.831 ms GAS. Save: lock 183 ms, baca log 244 ms, baca alert 839 ms, sync 1.174 ms, write presensi 13 ms, write alert 1 ms. Cache hits tanpa baca Sheets ikut 344–397 ms, memperkuat dugaan runtime/layanan melambat. Dua sampel belum cukup memisahkan variasi GAS dari dampak algoritme; profil ketiga masih dibutuhkan untuk median.
+
+- Sampel ketiga live pascaoptimasi (11 Okt 01:49 WIB): summary fresh/cache 1.494/122 ms; detail 1.085/134 ms; presensi gabungan 680/116 ms; save 2.408 ms route/2.293 ms GAS (lock 89 ms, baca log 174 ms, alertRead 411 ms, alertSync 553 ms).
+- Median tiga sampel pascaoptimasi: summary fresh/cache 2.454/346 ms; detail 1.961/342 ms; presensi fresh/cache 1.216/387 ms; save 3.401 ms route dan 2.862 ms GAS. Rentang save 2.408–4.133 ms, sedangkan cache presensi 116–397 ms. Satu baseline praedit: save 2.542 ms route, cache presensi 126 ms. Karena sebelum edit hanya satu pengukuran dan latensi v17 berfluktuasi, data ini tidak cukup untuk menyimpulkan algoritme mempercepat atau memperlambat. Klaim kinerja optimasi: belum terbukti.
+
+
+## Gauntlet — bukti akhir 11 Oktober 2026
+
+## Bukti
+- 8/8 suite Node, TypeScript, static build TEST (10 rute), sintaks GAS, diff check lulus. Lint 0 error/13 warning lama; Next memberi peringatan dukungan React 18 akan dihapus pada Next 17.
+- Google TEST via URL, dengan login TEST: gauntlet 15 checks dan regresi utama 26 checks PASS; gauntlet diulang sesudah optimasi cleanup dan tetap PASS.
+- Retry biasa PASS tanpa duplikasi; 3 kelas/3 sesi/6 request menghasilkan tepat 3 log (22.302 ms). Simulasi kegagalan respons sesudah commit PASS: retry tidak mengganti ID/menggandakan log; koreksi HADIR menyisakan nol log. Ini fault injection server, bukan pemutusan jaringan nyata.
+- Browser nyata: login; direktori 467 entri; detail dengan overlay dan fokus dialog; weekend menutup roster; Jumat X AK 6 siswa; save IZIN+PDF sintetis, pindah A/B/A, save ulang, database tepat satu log IZIN dan bukti. Bank Kasus semua kontrol disabled saat save, satu kasus tersimpan. Top3 terdiri dari tiga siswa berbeda.
+- Dua fixture UI dibersihkan; 10 pemeriksaan GET memastikan siswa/log/kasus/alert/arsip sintetis kosong. Sesi API tambahan di-logout; file token sementara dihapus.
+- TEST akhir v23 tanpa endpoint QA sementara; getQaResult dan runTestSuite terautentikasi ditolak dengan Action tidak dikenali. GET admin anonim ditolak UNAUTHORIZED. Produksi dan GitHub belum diubah.
+
+## Kecepatan dan batas
+CPU pada dataset identik 500 siswa/11.000 log/2.000 alert: baseline median 14,19 ms, kandidat 11,03 ms; critic terpisah juga mengukur 13,54 vs10,82 ms. Hasil valid-data identik. Ini CPU lokal, bukan waktu layanan Google.
+Browser sebelum optimasi cleanup kosong: summary 3.808 ms HTTP/2.104 ms GAS; detail 3.066/1.487; presensi 3.120–4.478 HTTP; save PDF 7.187/5.271; save ulang 5.253/3.609; Bank Kasus 4.194/2.166. Sampel terbatas, bukan p95.
+Profil akhir mengukur full summary 468 entri (467 roster + 1 sintetis), reset handle spreadsheet per logical request, dan gasMs mencakup finally: summary 1.640 ms fresh/129 cache; detail sintetis 1.393/138; presensi 678/125; save sintetis 1.512 ms route/1.511 GAS, 3 bacaan Sheets. Metrik dan cakupan berubah dari profil lama sehingga tidak boleh dipakai sebagai klaim persentase percepatan UI.
+404 ContentService belum dinyatakan selesai: run ini berhasil, tetapi kegagalan sebelumnya masih diketahui dan retry GET tetap best-effort. Tidak ada tes browser offline nyata atau load ratusan pengguna. Tidak ada bukti seluruh aplikasi bebas semua kemungkinan bug. Paket produksi 10 Oktober belum mencakup perubahan ini dan perlu diperbarui sebelum proposal rilis.
+
+## Putaran akhir: respons save hilang
+Critic mereproduksi status lama kembali setelah server sudah commit tetapi respons gagal, lalu pengguna berpindah kelas. Frontend kini meminta data otoritatif dengan `fresh=true` saat pindah kelas setelah kegagalan save. Jika refresh ikut gagal, loaded key dihapus dan tombol Simpan tetap disabled dengan pesan error; refresh berhasil memulihkan status dan tautan bukti server. Retry langsung di kelas yang sama tetap mempertahankan draft. Tes regresi mencakup commit IZIN+bukti, respons gagal, refresh gagal, refresh ulang berhasil, lalu save tanpa upload ulang.
+Perbandingan buta A/B di atas mendahului patch akhir ini; patch akhir diperiksa critic frontend secara terpisah. Fresh GET hanya menjamin rekonsiliasi write yang sudah commit; timeout ketika write masih berjalan dapat berlomba dengan GET dan belum diuji sebagai jaminan transaksi menyeluruh.

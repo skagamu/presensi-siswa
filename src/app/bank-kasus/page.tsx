@@ -79,10 +79,12 @@ export default function BankKasusInputPage() {
   }, [isGlobalSearchActive, searchSiswaGlobal, allStudentsAllLevels, semuaSiswaCurrentTingkat, activeKelas]);
 
   const toggleSiswa = (nis: string) => {
+    if (isSaving) return;
     setSelectedNis((prev) => (prev.includes(nis) ? prev.filter((n) => n !== nis) : [...prev, nis]));
   };
 
   const toggleSemuaDisplayed = () => {
+    if (isSaving) return;
     const displayedNisList = displayedSiswa.map((s) => s.nis);
     const allSelected = displayedNisList.every((nis) => selectedNis.includes(nis));
 
@@ -147,7 +149,8 @@ export default function BankKasusInputPage() {
               <Input
                 placeholder="Contoh: Merokok di kantin, Terlambat upacara, Atribut tidak lengkap..."
                 value={pelanggaran}
-                onChange={(e) => setPelanggaran(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setPelanggaran(e.target.value); }}
                 className="bg-white border-orange-200 focus-visible:ring-orange-500"
               />
             </div>
@@ -156,7 +159,8 @@ export default function BankKasusInputPage() {
               <Input
                 type="date"
                 value={tanggal}
-                onChange={(e) => setTanggal(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setTanggal(e.target.value); }}
                 className="bg-white border-gray-200"
               />
             </div>
@@ -167,13 +171,15 @@ export default function BankKasusInputPage() {
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <Input
               value={searchSiswaGlobal}
-              onChange={(e) => setSearchSiswaGlobal(e.target.value)}
+                disabled={isSaving}
+                onChange={(e) => { if (!isSaving) setSearchSiswaGlobal(e.target.value); }}
               placeholder="🔍 Cari nama atau NIS siswa lintas semua kelas (X, XI, XII)..."
               className="pl-9 pr-8 h-10 text-xs sm:text-sm bg-orange-50/40 border-orange-200 focus:bg-white focus:border-orange-500 font-medium"
             />
             {searchSiswaGlobal && (
               <button
-                onClick={() => setSearchSiswaGlobal("")}
+                disabled={isSaving}
+                onClick={() => { if (!isSaving) setSearchSiswaGlobal(""); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5"
               >
                 <X className="w-4 h-4" />
@@ -193,6 +199,7 @@ export default function BankKasusInputPage() {
                   <span className="truncate max-w-[140px] sm:max-w-[200px]">{s.nama}</span>
                   <span className="text-[10px] text-orange-700 font-bold bg-white/70 px-1 rounded">{s.kelas}</span>
                   <button
+                    disabled={isSaving}
                     type="button"
                     onClick={() => toggleSiswa(s.nis)}
                     className="text-orange-700 hover:text-orange-950 p-0.5"
@@ -203,8 +210,9 @@ export default function BankKasusInputPage() {
                 </span>
               ))}
               <button
+                disabled={isSaving}
                 type="button"
-                onClick={() => setSelectedNis([])}
+                onClick={() => { if (!isSaving) setSelectedNis([]); }}
                 className="text-[11px] font-semibold text-red-600 hover:text-red-700 hover:underline ml-1"
               >
                 Reset Pilihan
@@ -239,7 +247,7 @@ export default function BankKasusInputPage() {
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between border-t border-gray-100 pt-3 gap-3">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tingkat:</span>
-                  <Select value={tingkat} onValueChange={(val) => setTingkat(val)} disabled={isFetchingSiswa}>
+                  <Select value={tingkat} onValueChange={(val) => { if (!isSaving) setTingkat(val); }} disabled={isSaving || isFetchingSiswa}>
                     <SelectTrigger className="w-[110px] h-9 text-xs font-semibold bg-gray-50 border-gray-200">
                       <SelectValue placeholder="Tingkat" />
                     </SelectTrigger>
@@ -257,7 +265,7 @@ export default function BankKasusInputPage() {
                     variant="outline"
                     size="sm"
                     onClick={toggleSemuaDisplayed}
-                    disabled={displayedSiswa.length === 0}
+                    disabled={isSaving || displayedSiswa.length === 0}
                     className="h-8 text-xs font-semibold border-gray-200"
                   >
                     <CheckSquare className="w-3.5 h-3.5 mr-1" />
@@ -273,8 +281,9 @@ export default function BankKasusInputPage() {
                       const isActive = activeKelas === kls;
                       return (
                         <button
+                          disabled={isSaving}
                           key={kls}
-                          onClick={() => setKelas(kls)}
+                          onClick={() => { if (!isSaving) setKelas(kls); }}
                           className={`relative px-5 py-2.5 text-xs sm:text-sm font-medium whitespace-nowrap transition-colors outline-none ${
                             isActive ? "text-primary font-bold" : "text-gray-500 hover:text-gray-800"
                           }`}
@@ -302,6 +311,7 @@ export default function BankKasusInputPage() {
                   variant="outline"
                   size="sm"
                   onClick={toggleSemuaDisplayed}
+                  disabled={isSaving}
                   className="h-7 text-xs font-semibold border-orange-200 text-orange-900 bg-orange-50/50"
                 >
                   {displayedSiswa.length > 0 && displayedSiswa.every((s) => selectedNis.includes(s.nis)) ? "Batal Semua Hasil" : "Pilih Semua Hasil"}
@@ -326,6 +336,7 @@ export default function BankKasusInputPage() {
               const isSelected = selectedNis.includes(siswa.nis);
               return (
                 <button
+                  disabled={isSaving}
                   key={siswa.nis}
                   onClick={() => toggleSiswa(siswa.nis)}
                   className={`flex items-center gap-3 p-4 text-left transition-colors ${
@@ -333,6 +344,7 @@ export default function BankKasusInputPage() {
                   }`}
                 >
                   <Checkbox
+                    disabled={isSaving}
                     checked={isSelected}
                     onCheckedChange={() => toggleSiswa(siswa.nis)}
                     onClick={(e) => e.stopPropagation()}
@@ -356,6 +368,7 @@ export default function BankKasusInputPage() {
               <TableRow>
                 <TableHead className="w-[50px] text-center border-r border-gray-200 font-medium">
                   <Checkbox
+                    disabled={isSaving}
                     checked={
                       displayedSiswa.length > 0 &&
                       displayedSiswa.every((s) => selectedNis.includes(s.nis))
@@ -393,7 +406,7 @@ export default function BankKasusInputPage() {
                       onClick={() => toggleSiswa(siswa.nis)}
                     >
                       <TableCell className="text-center border-r border-gray-200" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={isSelected} onCheckedChange={() => toggleSiswa(siswa.nis)} />
+                        <Checkbox disabled={isSaving} checked={isSelected} onCheckedChange={() => toggleSiswa(siswa.nis)} />
                       </TableCell>
                       <TableCell className="border-r border-gray-200 text-xs font-mono text-gray-600">
                         {siswa.nis}

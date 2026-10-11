@@ -68,7 +68,9 @@ function runCopyRegression() {
     const bank = call('saveBankKasus', { date: dates[5], pelanggaran: '=1+1', request_id: bankRequestId, students: [{ nis, kelas: 'X UJI' }] });
     check(bank.status === 'success', 'Simpan bank kasus harus berhasil.');
     const bankSheet = ss.getSheetByName('BankKasus'), bankRows = bankSheet.getDataRange().getValues();
-    check(bankRows.some(row => row[7] === bankRequestId && row[5] === "'=1+1"), 'Teks formula harus disimpan sebagai literal dan ID operasi tercatat.');
+    const bankRowIndex = bankRows.findIndex(row => row[7] === bankRequestId);
+    const bankRow = bankRows[bankRowIndex];
+    check(bankRowIndex >= 0 && ['=1+1', "'=1+1"].includes(bankRow[5]) && !bankSheet.getRange(bankRowIndex + 1, 6).getFormula(), 'Teks formula harus disimpan sebagai literal dan ID operasi tercatat.');
     const bankCount = bankSheet.getLastRow();
     check(call('saveBankKasus', { date: dates[5], pelanggaran: '=1+1', request_id: bankRequestId, students: [{ nis, kelas: 'X UJI' }] }).status === 'success' && bankSheet.getLastRow() === bankCount, 'Retry bank kasus tidak boleh membuat duplikat.');
     const directory = read('getStudentDirectory', { nis });
@@ -218,20 +220,48 @@ function runCopyPerformanceProfile() {
   if (!ss || ss.getId() !== copyId) throw Error('Hanya spreadsheet TEST.');
   const props = PropertiesService.getScriptProperties();
   if (props.getProperty('SPREADSHEET_ID') !== copyId) throw Error('Database TEST tidak cocok.');
-  const endpoint = 'https://script.google.com/macros/s/AKfycbzU3R2QgwlikQdaPbctkl5mmZWuIdHGEkBC5pI6xFMckit1YBKnjtc5gTUQgRX9Alu64Q/exec';
   const token = Utilities.getUuid() + Utilities.getUuid();
+  const nis = '995' + String(Date.now()).slice(-9);
+  const students = ss.getSheetByName('Siswa_X');
+  const profileDate = '2026-10-12';
+  if (SpreadsheetRepository.students().some(s => s.nis === nis)) throw Error('NIS uji sudah ada.');
+  students.appendRow([99999, 'X PERF', nis, 'SISWA UJI PERF', '', '', '']);
   props.setProperty('SESSION_' + token, JSON.stringify({ user: { id: 'TEST', username: 'test', role: 'ADMIN' }, expiresAt: Date.now() + 600000 }));
-  const student = SpreadsheetRepository.students()[0];
   const results = [];
+  const invoke = (action, payload = {}, post = false) => {
+    SpreadsheetRepository.spreadsheet = null;
+    const started = Date.now();
+    const result = JSON.parse(route({ ...payload, action, token, profile: 'true' }, post).getContent());
+    return { result, routeMs: Date.now() - started };
+  };
   try {
-    for (const params of [{ summary: 'true', fresh: 'true' }, { summary: 'true' }, { nis: student.nis, tingkat: student.tingkat, fresh: 'true' }, { nis: student.nis, tingkat: student.tingkat }]) {
-      const start = Date.now();
-      const query = Object.entries({ action: 'getStudentDirectory', profile: 'true', ...params, token }).map(([k,v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
-      const response = JSON.parse(UrlFetchApp.fetch(endpoint + '?' + query).getContentText());
+    DirectoryCache.invalidate();
+    for (const params of [{ summary: 'true', fresh: 'true' }, { summary: 'true' }, { nis, tingkat: 'X', fresh: 'true' }, { nis, tingkat: 'X' }]) {
+      const { result: response, routeMs } = invoke('getStudentDirectory', params);
       if (response.status !== 'success' || !response.profile) throw Error('Profil tidak tersedia.');
-      results.push({ kind: params.summary ? 'summary' : 'detail', fresh: !!params.fresh, httpMs: Date.now()-start, ...response.profile });
+      results.push({ kind: params.summary ? 'summary' : 'detail', studentCount: response.data.students.length, fresh: !!params.fresh, routeMs, ...response.profile });
     }
-  } finally { props.deleteProperty('SESSION_' + token); CacheService.getScriptCache().remove('SESSION_' + token); }
+    DirectoryCache.invalidate();
+    for (const fresh of ['true', 'false']) {
+      const { result: response, routeMs } = invoke('getAttendancePageData', { tingkat: 'X', date: profileDate, fresh });
+      if (response.status !== 'success' || !response.profile || response.data.students.length === 0) throw Error('Profil presensi gabungan tidak tersedia.');
+      results.push({ kind: 'attendance-page', fresh: fresh === 'true', routeMs, ...response.profile });
+    }
+    const { result: saved, routeMs } = invoke('saveAttendance', { date: profileDate, attendances: [{ nis, kelas: 'X PERF', status_presensi: 'SAKIT' }] }, true);
+    if (saved.status !== 'success' || !saved.profile) throw Error('Profil simpan presensi tidak tersedia: ' + saved.message);
+    results.push({ kind: 'attendance-save', routeMs, ...saved.profile });
+  } finally {
+    const lock = LockService.getScriptLock(); lock.waitLock(30000);
+    try {
+      for (const [sheetName, column] of [['LogPresensi', 2], ['PeringatanKasus', 1]]) {
+        const target = ss.getSheetByName(sheetName), rows = target.getDataRange().getValues();
+        for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][column]) === nis) target.deleteRow(i + 1);
+      }
+      const rows = students.getDataRange().getValues(); for (let i = rows.length - 1; i >= 1; i--) if (String(rows[i][2]) === nis) students.deleteRow(i + 1);
+      DirectoryCache.invalidate();
+    }
+    finally { lock.releaseLock(); props.deleteProperty('SESSION_' + token); CacheService.getScriptCache().remove('SESSION_' + token); }
+  }
   console.log(JSON.stringify({status:'PASS',results}));
   return results;
 }
@@ -275,19 +305,79 @@ function runCopyRetryRegression() {
   const nis='997'+String(Date.now()).slice(-9),token=Utilities.getUuid()+Utilities.getUuid();
   if(SpreadsheetRepository.students().some(s=>s.nis===nis))throw Error('NIS sudah ada.');
   props.setProperty('SESSION_'+token,JSON.stringify({user:{id:'TEST',username:'test',role:'ADMIN'},expiresAt:Date.now()+600000}));
-  const request=(status,loseResponse)=>JSON.parse(UrlFetchApp.fetch(endpoint,{method:'post',contentType:'text/plain;charset=utf-8',muteHttpExceptions:true,payload:JSON.stringify({action:'saveAttendance',token,date:'2026-10-20',test_response_loss:!!loseResponse,attendances:[{nis,kelas:'X QA',status_presensi:status}]})}).getContentText());
+  const request=status=>JSON.parse(UrlFetchApp.fetch(endpoint,{method:'post',contentType:'text/plain;charset=utf-8',muteHttpExceptions:true,payload:JSON.stringify({action:'saveAttendance',token,date:'2026-10-20',attendances:[{nis,kelas:'X QA',status_presensi:status}]})}).getContentText());
   let result;
   try{
     ss.getSheetByName('Siswa_X').appendRow([99999,'X QA',nis,'SISWA QA RETRY','','','']);
-    const start=Date.now();const lost=request('SAKIT',true);if(lost.status!=='error')throw Error('Fault response tidak aktif.');
-    if(SpreadsheetRepository.logs().filter(l=>l.nis===nis).length!==1)throw Error('Commit awal tidak tersimpan.');
-    const retry=request('SAKIT',false);if(retry.status!=='success'||SpreadsheetRepository.logs().filter(l=>l.nis===nis).length!==1)throw Error('Retry menggandakan data.');
-    if(request('HADIR',false).status!=='success'||SpreadsheetRepository.logs().some(l=>l.nis===nis))throw Error('Koreksi gagal.');
-    result={status:'PASS',responseLostAfterCommit:true,retryDuplicates:0,correctionRemainingLogs:0,elapsedMs:Date.now()-start};
+    const start=Date.now();const first=request('SAKIT');if(first.status!=='success')throw Error('Simpan awal gagal.');
+    if(SpreadsheetRepository.logs().filter(l=>l.nis===nis).length!==1)throw Error('Simpan awal tidak tercatat.');
+    const retry=request('SAKIT');if(retry.status!=='success'||SpreadsheetRepository.logs().filter(l=>l.nis===nis).length!==1)throw Error('Retry menggandakan data.');
+    if(request('HADIR').status!=='success'||SpreadsheetRepository.logs().some(l=>l.nis===nis))throw Error('Koreksi gagal.');
+    result={status:'PASS',duplicateRetryNoDuplicate:true,correctionRemainingLogs:0,elapsedMs:Date.now()-start};
   }finally{
     const lock=LockService.getScriptLock();lock.waitLock(30000);
     try{for(const [name,col]of [['LogPresensi',2],['PeringatanKasus',1],['PenyelesaianKasus',2],['Siswa_X',2]]){const sheet=ss.getSheetByName(name),rows=sheet.getDataRange().getValues();for(let i=rows.length-1;i>=1;i--)if(String(rows[i][col])===nis)sheet.deleteRow(i+1);}DirectoryCache.invalidate();}
     finally{lock.releaseLock();props.deleteProperty('SESSION_'+token);CacheService.getScriptCache().remove('SESSION_'+token);}
   }
   console.log(JSON.stringify(result));return result;
+}
+
+function runCopyGauntletRegression() {
+  const copyId = '16-zovxOikdR-qJPcuA_pZJb13U_Ka0sFnCVGE8U7YRQ';
+  const ss = SpreadsheetApp.getActiveSpreadsheet(), props = PropertiesService.getScriptProperties();
+  if (ScriptApp.getScriptId() !== '1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH' || !ss || ss.getId() !== copyId || props.getProperty('SPREADSHEET_ID') !== copyId) throw Error('Hanya project dan spreadsheet TEST.');
+  const base = '994' + String(Date.now()).slice(-8), pupils = [base + '1', base + '2'];
+  if (SpreadsheetRepository.students().some(s => pupils.includes(s.nis))) throw Error('NIS uji sudah ada.');
+  const token = Utilities.getUuid() + Utilities.getUuid(), checks = [];
+  const check = (value, message) => { if (!value) throw Error(message); checks.push(message); };
+  const call = (action, payload = {}, post = false) => JSON.parse(route({ ...payload, action, token }, post).getContent());
+  const save = (nis, date, status = 'SAKIT', extra = {}) => call('saveAttendance', { date, attendances: [{ nis, kelas: 'X GAUNTLET', status_presensi: status, ...extra }] }, true);
+  try {
+    props.setProperty('SESSION_' + token, JSON.stringify({ user: { id: 'TEST', username: 'test', nama: 'TEST', role: 'ADMIN' }, expiresAt: Date.now() + 600000 }));
+    for (const nis of pupils) ss.getSheetByName('Siswa_X').appendRow([99999, 'X GAUNTLET', nis, 'SISWA UJI GAUNTLET', '', '', '']);
+    const logs = ss.getSheetByName('LogPresensi');
+    for (const date of ['2026-10-05', '2026-10-06']) logs.appendRow(['RAW-' + Utilities.getUuid(), date, pupils[0], 'SISWA UJI GAUNTLET', 'X GAUNTLET', ' sakit ', 'FALSE', '', '2026-10-08']);
+    for (const nis of pupils) logs.appendRow(['INVALID-' + Utilities.getUuid(), '2026-10-00', nis, 'SISWA UJI GAUNTLET', 'X GAUNTLET', 'SAKIT', false, '', '2026-10-08']);
+    for (const status of ['SAKIT', 'HADIR']) logs.appendRow(['DUP-' + Utilities.getUuid(), '2026-10-07', pupils[0], 'SISWA UJI GAUNTLET', 'X GAUNTLET', status, false, '', '2026-10-08']);
+    DirectoryCache.invalidate();
+    check(save(pupils[0], '2026-10-08').status === 'success', 'Simpan status legacy berhasil');
+    let alerts = CaseController.list({ nis: pupils[0], academic_year: '2026-2027' });
+    check(alerts.length === 1 && Number(alerts[0].total_hari_absen) === 3, 'Alert hitung 3 hari valid, status normal, HADIR terakhir');
+    const summary = call('getStudentDirectory', { nis: pupils[0], tingkat: 'X', summary: 'true', fresh: 'true' });
+    check(summary.status === 'success' && summary.data.students[0].totalSakit === 3, 'Direktori dan alert konsisten');
+    for (const date of ['2026-10-05', '2026-10-06']) check(save(pupils[1], date).status === 'success', 'Simpan hari valid ' + date);
+    check(CaseController.list({ nis: pupils[1], academic_year: '2026-2027' }).length === 0, 'Tanggal invalid tidak memicu alert');
+    check(save(pupils[0], '2026-10-05').status === 'success', 'Simpan ulang boolean legacy');
+    check(SpreadsheetRepository.logs().find(r => r.nis === pupils[0] && r.tanggal === '2026-10-05').ada_surat_dokter === false, 'FALSE tetap false');
+    check(save(pupils[0], '2026-10-05', 'SAKIT', { ada_surat_dokter: 'false' }).status === 'error', 'String boolean ditolak');
+    const alertId = alerts[0].id_peringatan, setupLock = LockService.getScriptLock();
+    setupLock.waitLock(30000);
+    try {
+      const alertSheet = ss.getSheetByName('PeringatanKasus'), rows = alertSheet.getDataRange().getValues();
+      const original = rows.findIndex(r => r[0] === alertId);
+      if (original < 1) throw Error('Alert sintetis tidak ditemukan.');
+      alertSheet.insertRowBefore(original + 1);
+      try { alertSheet.getRange(original + 1, 1, 1, 8).setValues([['LEGACY-' + Utilities.getUuid(), pupils[0], 'SISWA UJI GAUNTLET', 'X GAUNTLET', 1, 3, 'AKTIF', '2026-10-05']]); }
+      catch (error) { alertSheet.deleteRow(original + 1); throw error; }
+      ss.getSheetByName('PenyelesaianKasus').appendRow(['RES-' + Utilities.getUuid(), alertId, pupils[0], 'SISWA UJI GAUNTLET', 'X GAUNTLET', 'https://example.invalid/TEST_GAUNTLET', 'ARSIP SINTETIS', 'TEST', '2026-10-08']);
+    } finally { setupLock.releaseLock(); }
+    check(save(pupils[0], '2026-10-08').status === 'success', 'Sinkronisasi arsip partial berhasil');
+    check(!CaseController.list({ nis: pupils[0], academic_year: '2026-2027' }).some(r => r.status_peringatan === 'AKTIF'), 'Arsip menutup duplikat aktif tanpa bergantung urutan');
+    check(save(pupils[0], '2026-10-08', 'HADIR').status === 'success', 'Koreksi setelah arsip berhasil');
+    check(CaseController.list({ nis: pupils[0], academic_year: '2026-2027' }).some(r => r.id_peringatan === alertId && r.status_peringatan === 'SELESAI'), 'Koreksi mempertahankan alert arsip');
+    check(call('resolveCase', { id_peringatan: alertId, nis: pupils[0] }, true).status === 'success', 'Retry resolusi memakai arsip tanpa upload');
+    check(CaseController.completed({ nis: pupils[0] }).length === 1, 'Tidak ada duplikat arsip');
+  } finally {
+    const lock = LockService.getScriptLock(); lock.waitLock(30000);
+    try {
+      for (const [name, column] of [['LogPresensi', 2], ['PeringatanKasus', 1], ['PenyelesaianKasus', 2], ['Siswa_X', 2]]) {
+        const sheet = ss.getSheetByName(name), rows = sheet.getDataRange().getValues();
+        for (let i = rows.length - 1; i >= 1; i--) if (pupils.includes(String(rows[i][column]))) sheet.deleteRow(i + 1);
+      }
+      DirectoryCache.invalidate();
+    } finally { lock.releaseLock(); props.deleteProperty('SESSION_' + token); CacheService.getScriptCache().remove('SESSION_' + token); }
+  }
+  const result = { status: 'PASS', checks: checks.length, details: checks, scope: 'GAS route langsung, data sintetis TEST, bukan HTTP/browser' };
+  console.log(JSON.stringify(result));
+  return result;
 }

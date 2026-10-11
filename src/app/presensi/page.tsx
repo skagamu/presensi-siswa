@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { Paperclip, FileCheck, X } from "lucide-react";
-import { getSiswa, getLogPresensi, saveAttendance } from "@/lib/api";
+import { getAttendancePageData, saveAttendance, type LogPresensi } from "@/lib/api";
 import { todayWib } from "@/lib/date";
+import { isSchoolDayWib } from "@/lib/reportData";
 import { fileToBase64, validateFile, ACCEPT_FILE_TYPES } from "@/lib/fileUpload";
 
 type StatusAbsen = "HADIR" | "SAKIT" | "IZIN" | "ALPHA";
@@ -30,8 +31,10 @@ export default function PresensiHarianPage() {
   const [kelas, setKelas] = useState<string>("");
   const [daftarKelas, setDaftarKelas] = useState<string[]>([]);
   const [semuaSiswa, setSemuaSiswa] = useState<Siswa[]>([]);
+  const [logsHari, setLogsHari] = useState<LogPresensi[]>([]);
+  const [loadedDataKey, setLoadedDataKey] = useState("");
 
-  const [isFetching, setIsFetching] = useState(false);
+  const [isFetching, setIsFetching] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [statusSiswa, setStatusSiswa] = useState<Record<string, StatusAbsen>>({});
   const [lampiranSiswa, setLampiranSiswa] = useState<Record<string, BuktiAttachment>>({});
@@ -45,65 +48,55 @@ export default function PresensiHarianPage() {
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
   const selection = `${tingkat}/${kelas}/${tanggal}`;
+  const dataSelection = `${tingkat}/${tanggal}`;
   const currentSelection = useRef(selection);
   useEffect(() => { currentSelection.current = selection; }, [selection]);
+  const proofRequest = useRef(0);
+  const saveNeedsReconciliation = useRef(false);
+  const closeUploadModal = () => { proofRequest.current += 1; setActiveModalNis(null); };
   const ready = !isFetching && syncedSelection === selection && !loadError;
-  const schoolDay = /^\d{4}-\d{2}-\d{2}$/.test(tanggal) &&
-    !Number.isNaN(Date.parse(`${tanggal}T12:00:00+07:00`)) &&
-    new Date(`${tanggal}T12:00:00+07:00`).toISOString().slice(0, 10) === tanggal &&
-    ![0, 6].includes(new Date(`${tanggal}T12:00:00+07:00`).getUTCDay());
+  const schoolDay = isSchoolDayWib(tanggal);
 
   useEffect(() => {
     let cancelled = false;
-    setIsFetching(true);
-    setKelas("");
-    setDaftarKelas([]);
-    setSemuaSiswa([]);
-    setSyncedSelection("");
-    setLoadError("");
-    getSiswa(tingkat).then(res => {
+    getAttendancePageData(tingkat, tanggal, saveNeedsReconciliation.current).then(res => {
       if (cancelled) return;
-      if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal memuat siswa.");
-      setSemuaSiswa(res.data);
-      const classes = Array.from(new Set(res.data.map(s => s.kelas))).filter(Boolean).sort();
+      if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal memuat presensi.");
+      saveNeedsReconciliation.current = false;
+      setSemuaSiswa(res.data.students);
+      setLogsHari(res.data.logs);
+      setLoadedDataKey(dataSelection);
+      const classes = Array.from(new Set(res.data.students.map(s => s.kelas))).filter(Boolean).sort();
       setDaftarKelas(classes);
-      setKelas(classes[0] || "");
+      setKelas(current => classes.includes(current) ? current : classes[0] || "");
     }).catch(error => {
       if (!cancelled) setLoadError(error.message || "Gagal memuat siswa.");
     }).finally(() => { if (!cancelled) setIsFetching(false); });
     return () => { cancelled = true; };
-  }, [tingkat, retry]);
+  }, [tingkat, tanggal, retry, dataSelection]);
 
   useEffect(() => {
-    let cancelled = false;
-    setSyncedSelection("");
-    setActiveModalNis(null);
     const classStudents = semuaSiswa.filter(s => s.kelas === kelas);
     setStatusSiswa(Object.fromEntries(classStudents.map(s => [s.nis, "HADIR" as StatusAbsen])));
     setLampiranSiswa({});
-    if (!kelas || !schoolDay || isFetching) return;
+    if (!kelas || !schoolDay || isFetching || loadedDataKey !== dataSelection) return;
     setLoadError("");
-    getLogPresensi({ date: tanggal, kelas }).then(res => {
-      if (cancelled) return;
-      if (res.status !== "success" || !res.data) throw new Error(res.message || "Gagal memuat presensi.");
-      const statuses: Record<string, StatusAbsen> = {};
-      const attachments: Record<string, BuktiAttachment> = {};
-      classStudents.forEach(s => { statuses[s.nis] = "HADIR"; });
-      res.data.forEach(log => {
-        if (log.tanggal !== tanggal || log.kelas !== kelas || !(log.nis in statuses)) return;
-        statuses[log.nis] = log.status_presensi;
-        if (log.link_bukti_izin || log.ada_surat_dokter) attachments[log.nis] = {
-          fileName: "Bukti tersimpan",
-          linkBukti: log.link_bukti_izin,
-          adaSuratDokter: log.ada_surat_dokter,
-        };
-      });
-      setStatusSiswa(statuses);
-      setLampiranSiswa(attachments);
-      setSyncedSelection(selection);
-    }).catch(error => { if (!cancelled) setLoadError(error.message || "Gagal memuat presensi."); });
-    return () => { cancelled = true; };
-  }, [kelas, tanggal, semuaSiswa, isFetching, schoolDay, selection]);
+    const statuses: Record<string, StatusAbsen> = {};
+    const attachments: Record<string, BuktiAttachment> = {};
+    classStudents.forEach(s => { statuses[s.nis] = "HADIR"; });
+    logsHari.forEach(log => {
+      if (log.tanggal !== tanggal || log.kelas !== kelas || !(log.nis in statuses)) return;
+      statuses[log.nis] = log.status_presensi;
+      if (log.link_bukti_izin || log.ada_surat_dokter) attachments[log.nis] = {
+        fileName: "Bukti tersimpan",
+        linkBukti: log.link_bukti_izin,
+        adaSuratDokter: log.ada_surat_dokter,
+      };
+    });
+    setStatusSiswa(statuses);
+    setLampiranSiswa(attachments);
+    setSyncedSelection(selection);
+  }, [kelas, tanggal, semuaSiswa, logsHari, isFetching, schoolDay, selection, loadedDataKey, dataSelection]);
 
   const filterSiswa = semuaSiswa.filter(s => s.kelas === kelas);
   const summary = filterSiswa.reduce((acc, siswa) => {
@@ -137,17 +130,24 @@ export default function PresensiHarianPage() {
     try {
       const res = await saveAttendance(tanggal, dataKirim);
       if (res.status !== "success") throw new Error(res.message || "Gagal menyimpan presensi.");
-      setLampiranSiswa(prev => {
-        const next = { ...prev };
-        for (const { nis, linkBukti } of res.data?.uploadedLinks || []) {
-          const current = next[nis];
-          if (current && linkBukti) next[nis] = { ...current, fileName: current.fileBase64 ? current.fileName : "Bukti tersimpan", fileBase64: undefined, linkBukti };
-        }
-        return next;
-      });
+      saveNeedsReconciliation.current = false;
+      const uploadedLinks = new Map((res.data?.uploadedLinks || []).map(({ nis, linkBukti }) => [nis, linkBukti]));
+      const savedRows: LogPresensi[] = dataKirim.map(row => ({
+        nis: row.nis,
+        nama: row.nama,
+        kelas: row.kelas,
+        status_presensi: row.status_presensi,
+        ada_surat_dokter: row.ada_surat_dokter,
+        tanggal,
+        id_presensi: "",
+        waktu_simpan: "",
+        link_bukti_izin: uploadedLinks.get(row.nis) || row.link_bukti_izin,
+      }));
+      setLogsHari(prev => [...prev.filter(log => log.tanggal !== tanggal || log.kelas !== kelas), ...savedRows]);
       if (res.data?.alertSyncPending) toast.warning(res.message || "Presensi tersimpan, sinkronisasi alert belum berhasil. Simpan ulang untuk mencoba lagi.");
       else toast.success(`Presensi Kelas ${kelas} tanggal ${tanggal} disimpan!`);
     } catch {
+      saveNeedsReconciliation.current = true;
       toast.error("Gagal mengirim presensi.");
     } finally {
       setIsSaving(false);
@@ -168,6 +168,7 @@ export default function PresensiHarianPage() {
 
   const openUploadModal = (nis: string) => {
     if (!ready || isSaving) return;
+    proofRequest.current += 1;
     const existing = lampiranSiswa[nis];
     setTempAdaDokter(existing ? existing.adaSuratDokter : false);
     setTempFile(null);
@@ -177,6 +178,7 @@ export default function PresensiHarianPage() {
   const handleSaveModalBukti = async () => {
     if (!activeModalNis || !ready || isSaving) return;
     const modalSelection = selection;
+    const request = ++proofRequest.current;
 
     if (tempFile) {
       const validation = validateFile(tempFile);
@@ -185,7 +187,7 @@ export default function PresensiHarianPage() {
       }
       try {
         const base64 = await fileToBase64(tempFile);
-        if (currentSelection.current !== modalSelection) return;
+        if (currentSelection.current !== modalSelection || proofRequest.current !== request) return;
         setLampiranSiswa(prev => ({
           ...prev,
           [activeModalNis]: {
@@ -196,7 +198,8 @@ export default function PresensiHarianPage() {
         }));
         toast.success("Bukti tersimpan untuk siswa ini.");
       } catch {
-        return toast.error("Gagal memproses file.");
+        if (proofRequest.current === request) toast.error("Gagal memproses file.");
+        return;
       }
     } else {
       // Hanya update checkbox surat dokter jika sudah ada file sebelumnya
@@ -213,7 +216,7 @@ export default function PresensiHarianPage() {
       });
     }
 
-    setActiveModalNis(null);
+    closeUploadModal();
   };
 
   const removeBukti = (nis: string) => {
@@ -236,7 +239,7 @@ export default function PresensiHarianPage() {
         <p className="text-muted-foreground mt-1 text-sm">Default status siswa adalah HADIR. Klik opsi untuk mengubah & lampirkan bukti.</p>
       </div>
 
-      {loadError && <div role="alert" className="text-sm text-red-600">{loadError} <Button variant="outline" onClick={() => setRetry(n => n + 1)}>Coba lagi</Button></div>}
+      {loadError && <div role="alert" className="text-sm text-red-600">{loadError} <Button variant="outline" onClick={() => { setIsFetching(true); setLoadError(""); setRetry(n => n + 1); }}>Coba lagi</Button></div>}
       <div className="grid grid-cols-4 gap-2">
         {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((status) => (
           <div key={status} className="rounded-md border border-gray-200 bg-white p-3 shadow-sm">
@@ -254,7 +257,7 @@ export default function PresensiHarianPage() {
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <div className="w-full sm:w-[130px]">
               <label className="text-xs font-semibold text-gray-500 mb-1 block">Tingkat</label>
-              <Select disabled={isSaving} value={tingkat} onValueChange={(val) => { setTingkat(val as "X" | "XI" | "XII"); }}>
+              <Select disabled={isSaving} value={tingkat} onValueChange={(val) => { closeUploadModal(); setIsFetching(true); setLoadError(""); setTingkat(val as "X" | "XI" | "XII"); }}>
                 <SelectTrigger className="bg-white border-gray-300 font-medium">
                   <SelectValue placeholder="Pilih Tingkat" />
                 </SelectTrigger>
@@ -268,7 +271,16 @@ export default function PresensiHarianPage() {
 
             <div className="w-full sm:w-[180px]">
               <label className="text-xs font-semibold text-gray-500 mb-1 block">Kelas</label>
-              <Select value={kelas} onValueChange={setKelas} disabled={isSaving || daftarKelas.length === 0}>
+              <Select value={kelas} onValueChange={(val) => {
+                closeUploadModal();
+                if (val !== kelas && saveNeedsReconciliation.current) {
+                  setLoadedDataKey("");
+                  setIsFetching(true);
+                  setLoadError("");
+                  setRetry(n => n + 1);
+                }
+                setKelas(val);
+              }} disabled={isSaving || daftarKelas.length === 0}>
                 <SelectTrigger className="bg-white border-gray-300 font-medium">
                   <SelectValue placeholder="Pilih Kelas" />
                 </SelectTrigger>
@@ -286,7 +298,7 @@ export default function PresensiHarianPage() {
                 type="date"
                 disabled={isSaving}
                 value={tanggal}
-                onChange={(e) => setTanggal(e.target.value)}
+                onChange={(e) => { closeUploadModal(); setIsFetching(true); setLoadError(""); setTanggal(e.target.value); }}
                 className="w-full h-10 px-3 rounded-md border border-gray-300 bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             </div>
@@ -325,6 +337,7 @@ export default function PresensiHarianPage() {
                       <Button
                         size="sm"
                         variant={lampiran ? "secondary" : "outline"}
+                        disabled={!ready || isSaving}
                         onClick={() => openUploadModal(siswa.nis)}
                         className={`h-7 px-2 text-[11px] gap-1 shrink-0 ${lampiran ? 'bg-blue-50 text-blue-700 border-blue-200' : 'text-gray-600'}`}
                       >
@@ -348,7 +361,7 @@ export default function PresensiHarianPage() {
                   {lampiran && (
                     <div className="flex items-center justify-between text-[11px] bg-blue-50 text-blue-800 px-2.5 py-1 rounded border border-blue-100">
                       <span className="truncate max-w-[200px]">{lampiran.fileName} {lampiran.adaSuratDokter ? "(Surat Dokter)" : ""}</span>
-                      <button aria-label={`Hapus bukti ${siswa.nama}`} onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
+                      <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving} onClick={() => removeBukti(siswa.nis)} className="text-red-500 hover:text-red-700 ml-2">
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -418,7 +431,7 @@ export default function PresensiHarianPage() {
                             <div className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-md text-xs">
                               <FileCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span className="truncate max-w-[90px] font-medium" title={lampiran.fileName}>{lampiran.fileName}</span>
-                              <button aria-label={`Hapus bukti ${siswa.nama}`} onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
+                              <button aria-label={`Hapus bukti ${siswa.nama}`} disabled={!ready || isSaving} onClick={() => removeBukti(siswa.nis)} className="text-gray-400 hover:text-red-600 ml-1">
                                 <X className="w-3 h-3" />
                               </button>
                             </div>
@@ -426,6 +439,7 @@ export default function PresensiHarianPage() {
                             <Button
                               variant="outline"
                               size="sm"
+                              disabled={!ready || isSaving}
                               onClick={() => openUploadModal(siswa.nis)}
                               className="h-8 px-2.5 text-xs gap-1.5 border-dashed border-gray-300 text-gray-600 hover:border-gray-400 hover:bg-gray-50"
                             >
@@ -461,7 +475,7 @@ export default function PresensiHarianPage() {
       </div>
 
       {/* DIALOG UPLOAD BUKTI IZIN / SAKIT */}
-      <Dialog open={!!activeModalNis} onOpenChange={(open) => { if (!open) setActiveModalNis(null); }}>
+      <Dialog open={!!activeModalNis} onOpenChange={(open) => { if (!open) closeUploadModal(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Unggah Bukti {activeStatus === "SAKIT" ? "Sakit" : "Izin"}</DialogTitle>
@@ -480,6 +494,7 @@ export default function PresensiHarianPage() {
                 accept={ACCEPT_FILE_TYPES}
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
+                    proofRequest.current += 1;
                     setTempFile(e.target.files[0]);
                   }
                 }}
@@ -493,7 +508,7 @@ export default function PresensiHarianPage() {
                 <Checkbox
                   id="surat-dokter"
                   checked={tempAdaDokter}
-                  onCheckedChange={(checked) => setTempAdaDokter(Boolean(checked))}
+                  onCheckedChange={(checked) => { proofRequest.current += 1; setTempAdaDokter(Boolean(checked)); }}
                 />
                 <label
                   htmlFor="surat-dokter"
@@ -505,7 +520,7 @@ export default function PresensiHarianPage() {
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" type="button" onClick={() => setActiveModalNis(null)}>Batal</Button>
+            <Button variant="outline" type="button" onClick={() => closeUploadModal()}>Batal</Button>
             <Button type="button" onClick={handleSaveModalBukti} className="font-semibold">Simpan Bukti</Button>
           </DialogFooter>
         </DialogContent>

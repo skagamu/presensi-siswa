@@ -4,9 +4,13 @@ const ts = require('typescript');
 function load(file) { const m = {exports:{}}; new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(require,m,m.exports); return m.exports; }
 const page = fs.readFileSync('src/app/rekap/page.tsx','utf8');
 assert(!page.includes('const key = mode === "KUSTOM" ? wd.dateFull : String(wd.dayIndex)'), 'Weekly reports must use full-date keys across month boundaries');
-const {dateKey, jakartaToday, cappedRange, reportStatus, periodCounts, absenceRate} = load('src/lib/reportData.ts');
+const {dateKey, jakartaToday, isSchoolDayWib, cappedRange, reportStatus, periodCounts, absenceRate} = load('src/lib/reportData.ts');
 assert.equal(dateKey(new Date(2026, 0, 1)), '2026-01-01');
 assert.equal(jakartaToday(new Date('2026-01-01T18:00:00Z')), '2026-01-02');
+assert.equal(isSchoolDayWib('2026-10-09'), true);
+assert.equal(isSchoolDayWib('2026-10-10'), false);
+assert.equal(isSchoolDayWib('2026-10-11'), false);
+assert.equal(isSchoolDayWib('2026-02-31'), false);
 assert.deepEqual(cappedRange('2026-01-01','2026-04-01'), ['2026-01-01','2026-03-01']);
 assert.equal(reportStatus({}, '2026-01-02', false, '2026-01-02'), 'HADIR');
 assert.equal(reportStatus({}, '2026-01-03', false, '2026-01-02'), '');

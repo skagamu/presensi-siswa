@@ -119,6 +119,13 @@ function doGet(e) {
 }
 function route(p, post) {
   RequestProfile.begin(p.profile === 'true');
+  const response = routeRequest_(p, post);
+  if (!RequestProfile.enabled) return response;
+  const body = JSON.parse(response.getContent());
+  body.profile = RequestProfile.result();
+  return ContentService.createTextOutput(JSON.stringify(body)).setMimeType(ContentService.MimeType.JSON);
+}
+function routeRequest_(p, post) {
   try {
     if (post && p.action === 'login') return AuthController.login(p);
     if (!AuthController.session(p.token)) return ResponseHelper.error('Sesi berakhir. Silakan login.', 'UNAUTHORIZED');
@@ -126,6 +133,7 @@ function route(p, post) {
       getStudents: StudentController.getListGet,
       getSiswa: StudentController.getListGet,
       getLogPresensi: AttendanceController.getLogs,
+      getAttendancePageData: AttendanceController.getPageData,
       getPeringatanKasus: CaseController.getList,
       getPenyelesaianKasus: CaseController.getPenyelesaian,
       getPriorityAlerts: () => ResponseHelper.success(SpreadsheetRepository.getActiveAlerts()),
@@ -149,7 +157,7 @@ function route(p, post) {
     if (!fn) throw Error('Action tidak dikenali.');
     if (!post) return fn(p);
     const lock = LockService.getScriptLock();
-    lock.waitLock(30000);
+    RequestProfile.measure('lockWaitMs', () => lock.waitLock(30000));
     try {
       return fn(p);
     } finally {
@@ -262,7 +270,8 @@ const TimeHelper = {
     return v;
   },
   school(v) {
-    return ![0, 6].includes(new Date(v + 'T00:00:00Z').getUTCDay());
+    const date = new Date(v + 'T00:00:00Z');
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === v && ![0, 6].includes(date.getUTCDay());
   },
   year(p = {}) {
     const now = this.getCurrentDate(),
@@ -286,7 +295,7 @@ function filterRecords(rows, p, dateField) {
 }
 const RequestProfile = {
   enabled: false, started: 0, metrics: {},
-  begin(enabled) { this.enabled = enabled; this.started = Date.now(); this.metrics = { openSpreadsheetMs: 0, sheetLookupMs: 0, sheetReadMs: 0, sheetReads: 0 }; },
+  begin(enabled) { this.enabled = enabled; this.started = Date.now(); this.metrics = { openSpreadsheetMs: 0, sheetLookupMs: 0, sheetReadMs: 0, sheetReads: 0, lockWaitMs: 0, attendanceReadMs: 0, attendanceWriteMs: 0, alertReadMs: 0, alertWriteMs: 0, alertSyncMs: 0 }; },
   measure(field, read) { const start = Date.now(); try { return read(); } finally { if (this.enabled) this.metrics[field] += Date.now() - start; } },
   result() { return { ...this.metrics, gasMs: Date.now() - this.started }; }
 };
@@ -306,8 +315,11 @@ const SpreadsheetRepository = {
   },
   readRows(name) {
     const sheet = this.getSheet(name);
+    return this.readSheet(sheet);
+  },
+  readSheet(sheet, field = 'sheetReadMs') {
     if (RequestProfile.enabled) RequestProfile.metrics.sheetReads++;
-    return RequestProfile.measure('sheetReadMs', () => sheet.getDataRange().getValues());
+    return RequestProfile.measure(field, () => sheet.getDataRange().getValues());
   },
   getStudentsBySheet(name) {
     return this.readRows(name).slice(1).filter(r => r[2] && r[3]).map(r => ({
@@ -450,24 +462,46 @@ const StudentController = {
 };
 const AttendanceController = {
   getLogs: p => ResponseHelper.success(filterRecords(SpreadsheetRepository.logs(), p, 'tanggal')),
+  getPageData(p) {
+    const date = TimeHelper.valid(p.date);
+    if (!['X', 'XI', 'XII'].includes(p.tingkat)) throw Error('Tingkat tidak valid.');
+    const cacheKey = DirectoryCache.key({ ...p, summary: 'attendance' });
+    const cached = DirectoryCache.get(cacheKey, p.fresh === 'true');
+    if (cached) return ResponseHelper.success(cached);
+    const students = SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS['SISWA_' + p.tingkat])
+      .map(s => ({ ...s, tingkat: p.tingkat }));
+    const roster = new Set(students.map(s => s.nis));
+    const logs = TimeHelper.school(date)
+      ? SpreadsheetRepository.logs().filter(log => log.tanggal === date && roster.has(log.nis))
+      : [];
+    return DirectoryCache.respond(cacheKey, { students, logs });
+  },
   save(p) {
     const date = TimeHelper.valid(p.date || TimeHelper.getCurrentDate());
     if (!TimeHelper.school(date)) throw Error('Presensi hanya Senin–Jumat.');
     if (!Array.isArray(p.attendances) || !p.attendances.length) throw Error('Data presensi kosong.');
-    const pupils = new Map(SpreadsheetRepository.students().map(s => [s.nis, s])),
+    const levels = new Set(p.attendances.map(s => {
+      const level = String(s.kelas || '').trim().split(/\s+/)[0];
+      return ['X', 'XI', 'XII'].includes(level) ? level : null;
+    }));
+    const roster = levels.size === 1 && !levels.has(null)
+      ? SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS['SISWA_' + levels.values().next().value])
+      : SpreadsheetRepository.students();
+    const pupils = new Map(roster.map(s => [s.nis, s])),
       seen = new Set();
     const students = p.attendances.map(s => {
       const pupil = pupils.get(String(s.nis));
       if (!pupil || seen.has(pupil.nis) || s.kelas && s.kelas !== pupil.kelas || !['HADIR', 'SAKIT', 'IZIN', 'ALPHA'].includes(s.status_presensi)) throw Error('Data siswa/status tidak valid.');
       seen.add(pupil.nis);
       if (s.fileBase64 && !s.fileName || !s.fileBase64 && s.fileName) throw Error('Lampiran tidak lengkap.');
+      if (s.ada_surat_dokter !== undefined && typeof s.ada_surat_dokter !== 'boolean') throw Error('Status surat dokter harus boolean.');
       return {
         ...s,
         ...pupil
       };
     });
     const sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.LOG_PRESENSI),
-      rows = sheet.getDataRange().getValues(),
+      rows = SpreadsheetRepository.readSheet(sheet, 'attendanceReadMs'),
       timestamp = TimeHelper.getCurrentTimestamp(),
       links = [];
     const existing = new Map(rows.slice(1).filter(r => TimeHelper.date(r[1]) === date).map(r => [String(r[2]), r])),
@@ -482,7 +516,7 @@ const AttendanceController = {
           nis: s.nis,
           linkBukti: link
         });
-        return [old ? old[0] : 'ATT-' + Utilities.getUuid(), date, s.nis, s.nama, s.kelas, s.status_presensi, s.ada_surat_dokter === undefined ? Boolean(old && old[6]) : Boolean(s.ada_surat_dokter), link, timestamp];
+        return [old ? old[0] : 'ATT-' + Utilities.getUuid(), date, s.nis, s.nama, s.kelas, s.status_presensi, s.ada_surat_dokter === undefined ? old?.[6] === true || String(old?.[6]).trim().toUpperCase() === 'TRUE' : s.ada_surat_dokter, link, timestamp];
       });
     const pending = new Map(updated.map(r => [String(r[2]), r])),
       releasedLinks = students.map(s => {
@@ -499,9 +533,9 @@ const AttendanceController = {
       } else result.push(row);
     }
     result.push(...pending.values());
-      SpreadsheetRepository.replace(sheet, result, 9, rows);
+      RequestProfile.measure('attendanceWriteMs', () => SpreadsheetRepository.replace(sheet, result, 9, rows));
       let alertSyncPending = false;
-      try { AlertService.reconcile(students, result.slice(1), date, timestamp); }
+      try { RequestProfile.measure('alertSyncMs', () => AlertService.reconcile(students, result.slice(1), date, timestamp)); }
       catch (error) { alertSyncPending = true; console.error('Presensi tersimpan, sinkronisasi alert gagal: ' + error.message); }
       FileService.cleanupManagedLinks(releasedLinks, [CONFIG.SHEETS.LOG_PRESENSI, CONFIG.SHEETS.PENYELESAIAN_KASUS], 'BK_Bukti_Izin');
       return ResponseHelper.success({ uploadedLinks: links, alertSyncPending }, alertSyncPending
@@ -559,36 +593,53 @@ const AlertService = {
         academic_year: String(Number(date.slice(0, 4)) - (date.slice(5, 7) < '07' ? 1 : 0))
       }),
       sheet = SpreadsheetRepository.getSheet(CONFIG.SHEETS.PERINGATAN_KASUS),
-      rows = sheet.getDataRange().getValues(),
+      rows = SpreadsheetRepository.readSheet(sheet, 'alertReadMs'),
       days = new Map();
+    const targets = new Map(students.map(student => [String(student.nis), student]));
     for (const r of logs) {
-      const d = TimeHelper.date(r[1]),
-        nis = String(r[2]);
-      if (d >= year.start && d <= year.end && TimeHelper.school(d) && ['SAKIT', 'IZIN', 'ALPHA'].includes(r[5])) {
-        if (!days.has(nis)) days.set(nis, new Set());
-        days.get(nis).add(d);
-      }
+      const d = TimeHelper.date(r[1]), nis = String(r[2]), status = String(r[5] || '').trim().toUpperCase();
+      if (!targets.has(nis) || d < year.start || d > year.end || !TimeHelper.school(d) || !['HADIR', 'SAKIT', 'IZIN', 'ALPHA'].includes(status)) continue;
+      if (!days.has(nis)) days.set(nis, new Set());
+      if (status === 'HADIR') days.get(nis).delete(d);
+      else days.get(nis).add(d);
     }
-    let result = rows.filter((r, i) => i === 0 || r[0]).map(r => [...r]);
+    const thresholds = new Map(students.map(student => {
+      const count = (days.get(student.nis) || new Set()).size;
+      return [String(student.nis), { count, level: Math.min(4, Math.floor(count / 3)) }];
+    }));
+    const inYear = r => /ALERT-.*-\d{4}-\d{4}-[1-4]$/.test(String(r[0])) ? String(r[0]).includes(year.id) : TimeHelper.date(r[7]) >= year.start && TimeHelper.date(r[7]) <= year.end;
+    const archived = rows.some(r => targets.has(String(r[1])) && r[6] === 'AKTIF' && inYear(r))
+      ? new Set(SpreadsheetRepository.readRows(CONFIG.SHEETS.PENYELESAIAN_KASUS).slice(1).filter(r => r[0]).map(r => String(r[1]) + ':' + String(r[2])))
+      : new Set();
+    const completed = new Set();
+    for (const r of rows) if (targets.has(String(r[1])) && inYear(r) && (r[6] === 'SELESAI' || archived.has(String(r[0]) + ':' + String(r[1])))) completed.add(String(r[1]) + ':' + Number(r[4]));
+    const kept = new Set(), present = new Set();
+    const result = rows.filter((r, i) => i === 0 || r[0]).map(r => {
+      const row = [...r], nis = String(row[1]), target = targets.get(nis);
+      if (!target || !inYear(row)) return row;
+      const key = nis + ':' + Number(row[4]);
+      if (row[6] === 'AKTIF') {
+        const threshold = thresholds.get(nis);
+        if (archived.has(String(row[0]) + ':' + nis)) row[6] = 'SELESAI';
+        else if (Number(row[4]) > threshold.level || completed.has(key) || kept.has(key)) return null;
+        else {
+          kept.add(key);
+          row[5] = threshold.count;
+        }
+      }
+      present.add(key);
+      return row;
+    }).filter(Boolean);
     for (const s of students) {
-      const count = (days.get(s.nis) || new Set()).size,
-        level = Math.min(4, Math.floor(count / 3));
-      const inYear = r => /ALERT-.*-\d{4}-\d{4}-[1-4]$/.test(String(r[0])) ? String(r[0]).includes(year.id) : TimeHelper.date(r[7]) >= year.start && TimeHelper.date(r[7]) <= year.end;
-      result = result.filter((r, i) => i === 0 || !(String(r[1]) === s.nis && r[6] === 'AKTIF' && inYear(r) && Number(r[4]) > level));
-      const kept = new Set();
-      result = result.filter((r, i) => {
-        if (i === 0 || String(r[1]) !== s.nis || r[6] !== 'AKTIF' || !inYear(r)) return true;
-        const l = Number(r[4]);
-        if (kept.has(l) || result.some(other => String(other[1]) === s.nis && Number(other[4]) === l && other[6] === 'SELESAI' && inYear(other))) return false;
-        kept.add(l);
-        r[5] = count;
-        return true;
-      });
+      const { count, level } = thresholds.get(String(s.nis));
       for (let l = 1; l <= level; l++) {
-        if (!result.some(r => String(r[1]) === s.nis && Number(r[4]) === l && inYear(r))) result.push(['ALERT-' + s.nis + '-' + year.id + '-' + l, s.nis, s.nama, s.kelas, l, count, 'AKTIF', timestamp]);
+        if (!present.has(String(s.nis) + ':' + l)) {
+          result.push(['ALERT-' + s.nis + '-' + year.id + '-' + l, s.nis, s.nama, s.kelas, l, count, 'AKTIF', timestamp]);
+          present.add(String(s.nis) + ':' + l);
+        }
       }
     }
-    SpreadsheetRepository.replace(sheet, result, 8, rows);
+    RequestProfile.measure('alertWriteMs', () => SpreadsheetRepository.replace(sheet, result, 8, rows));
   }
 };
 const BankKasusController = {
@@ -637,10 +688,13 @@ const CaseController = {
       status_peringatan: r[6],
       waktu_dibuat: r[7] instanceof Date ? Utilities.formatDate(r[7], 'Asia/Jakarta', 'yyyy-MM-dd HH:mm:ss') : String(r[7])
     }));
+    const completedLevels = p.status_peringatan === 'AKTIF'
+      ? new Set(records.filter(r => r.status_peringatan === 'SELESAI').map(r => r.nis + ':' + Number(r.tingkat_kumulatif)))
+      : new Set();
     return filterRecords(records, {
       ...p,
       academic_year: undefined
-    }, 'waktu_dibuat').filter(r => !p.status_peringatan || r.status_peringatan === p.status_peringatan);
+    }, 'waktu_dibuat').filter(r => (!p.status_peringatan || r.status_peringatan === p.status_peringatan) && !(r.status_peringatan === 'AKTIF' && completedLevels.has(r.nis + ':' + Number(r.tingkat_kumulatif))));
   },
   getList: p => ResponseHelper.success(CaseController.list(p)),
   completed(p) {
@@ -722,9 +776,10 @@ const FileService = {
       return { id: file.getId(), url: file.getUrl() };
   },
   cleanupUnreferenced(files, sheetNames) {
+    if (!files.length) return;
     let references;
     try {
-      references = sheetNames.flatMap(name => SpreadsheetRepository.getSheet(name).getDataRange().getValues());
+      references = sheetNames.flatMap(name => SpreadsheetRepository.readRows(name));
     } catch (error) {
       console.error('Upload cleanup skipped because reference check failed: ' + error.message);
       return;
@@ -764,6 +819,7 @@ const ResponseHelper = {
   error: (message, code) => ContentService.createTextOutput(JSON.stringify({
     status: 'error',
     message,
+    ...(RequestProfile.enabled ? { profile: RequestProfile.result() } : {}),
     ...(code ? {
       code
     } : {})

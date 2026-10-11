@@ -13,6 +13,7 @@ const tables = {
   BankKasus: [['id', 'date', 'nis', 'name', 'class', 'case', 'time']]
 };
 const initialTables = JSON.parse(JSON.stringify(tables));
+const sheetReads = {};
 let uploads = 0,
   failUpload = false,
   failLogWrite = false,
@@ -26,7 +27,7 @@ const driveFiles = new Map();
 const props = { SPREADSHEET_ID: 'TEST_SHEET' }, cache = {};
 const sheet = name => ({
   getDataRange: () => ({
-    getValues: () => tables[name].map(r => [...r])
+    getValues: () => { sheetReads[name] = (sheetReads[name] || 0) + 1; return tables[name].map(r => [...r]); }
   }),
   getLastRow: () => tables[name].length,
   getRange: (row, col, n = 1, m = 1) => ({
@@ -43,6 +44,8 @@ const sheet = name => ({
     }
   }),
   appendRow: r => tables[name].push(r),
+  insertRowBefore: row => tables[name].splice(row - 1, 0, []),
+  deleteRow: row => tables[name].splice(row - 1, 1),
   clearContents: () => {
     tables[name] = [];
   }
@@ -131,9 +134,12 @@ const ctx = vm.createContext({
     MimeType: {
       JSON: 'json'
     },
-    createTextOutput: s => ({
-      setMimeType: () => JSON.parse(s)
-    })
+    createTextOutput: s => {
+      const body = JSON.parse(s);
+      Object.defineProperty(body, 'getContent', { value: () => JSON.stringify(body) });
+      Object.defineProperty(body, 'setMimeType', { value: () => body });
+      return body;
+    }
   }
 });
 vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../clasp_backend/Kode.js'), 'utf8'), ctx);
@@ -552,6 +558,7 @@ test('unchanged rows require no writes and one changed row writes only that row'
 
 function resetBackendFixture() {
   for (const name of Object.keys(tables)) tables[name] = initialTables[name].map(row => [...row]);
+  for (const name of Object.keys(sheetReads)) delete sheetReads[name];
   for (const key of Object.keys(props)) delete props[key];
   for (const key of Object.keys(cache)) delete cache[key];
   props.AUTH_SALT = 'transaction-test-salt'; props.SPREADSHEET_ID = 'TEST_SHEET';
@@ -560,6 +567,58 @@ function resetBackendFixture() {
   nextFileId = 1; driveFiles.clear();
   token = call('login', { username: 'admin', password: 'secret' }, true).data.token;
 }
+test('single-class attendance save reads only that grade roster', () => {
+  resetBackendFixture();
+  assert.equal(save('2026-10-08').status, 'success');
+  assert.equal(sheetReads.Siswa_X, 1);
+  assert.equal(sheetReads.Siswa_XI || 0, 0);
+  assert.equal(sheetReads.Siswa_XII || 0, 0);
+});
+test('attendance cannot save a student against another grade roster', () => {
+  resetBackendFixture();
+  tables.Siswa_XI.push(['3', 'XI A', '003', 'Cici']);
+  const response = call('saveAttendance', { token, date: '2026-10-08', attendances: [{ nis: '001', kelas: 'XI A', status_presensi: 'SAKIT' }] }, true);
+  assert.equal(response.status, 'error');
+  assert.equal(tables.LogPresensi.length, 1);
+  assert.equal(sheetReads.Siswa_XI, 1);
+  assert.equal(sheetReads.Siswa_X || 0, 0);
+});
+test('attendance page combines and caches one authorized grade/date payload', () => {
+  resetBackendFixture();
+  const params = { token, tingkat: 'X', date: '2026-10-08', profile: 'true' };
+  const cold = call('getAttendancePageData', params);
+  assert.equal(cold.status, 'success');
+  assert.equal(cold.profile.cache, 'miss');
+  assert.equal(cold.data.students.length, 2);
+  assert.deepEqual(cold.data.logs, []);
+  assert.equal(cold.profile.sheetReads, 2);
+  const warm = call('getAttendancePageData', params);
+  assert.equal(warm.profile.cache, 'hit');
+  assert.equal(warm.profile.sheetReads, 0);
+  assert.deepEqual(warm.data, cold.data);
+  const weekend = call('getAttendancePageData', { ...params, date: '2026-10-10', profile: 'true' });
+  assert.equal(weekend.data.logs.length, 0);
+  assert.equal(weekend.profile.sheetReads, 1);
+  assert.equal(call('getAttendancePageData', { ...params, tingkat: 'INVALID' }).status, 'error');
+  assert.equal(call('getAttendancePageData', { tingkat: 'X', date: '2026-10-08' }).code, 'UNAUTHORIZED');
+  assert.equal(save('2026-10-08').status, 'success');
+  const afterWrite = call('getAttendancePageData', params);
+  assert.equal(afterWrite.profile.cache, 'miss');
+  assert.equal(afterWrite.data.logs.length, 1);
+  assert.equal(afterWrite.data.logs[0].nis, '001');
+});
+test('attendance save profile measures lock, attendance and alert work', () => {
+  resetBackendFixture();
+  const response = call('saveAttendance', {
+    token, profile: 'true', date: '2026-10-08',
+    attendances: [{ nis: '001', kelas: 'X A', status_presensi: 'SAKIT' }]
+  }, true);
+  assert.equal(response.status, 'success');
+  for (const metric of ['lockWaitMs', 'attendanceReadMs', 'attendanceWriteMs', 'alertReadMs', 'alertWriteMs', 'alertSyncMs']) {
+    assert.equal(typeof response.profile[metric], 'number', metric);
+  }
+  assert(response.profile.sheetReads >= 3);
+});
 function withFailureReset(run) {
   try { run(); }
   finally { failUpload = false; failLogWrite = false; failAlertWrite = false; failResolutionArchive = false; failNthUpload = 0; locked = false; }
@@ -641,5 +700,109 @@ test('directory cache is scoped, authorized, bypassable and invalidated on write
   props.SPREADSHEET_ID='OTHER_DATABASE';assert.equal(call('getStudentDirectory',params).profile.cache,'miss');delete props.SPREADSHEET_ID;
   assert.equal(call('getStudentDirectory',params).status,'error');props.SPREADSHEET_ID='TEST_SHEET';
   const keys=Object.keys(cache).filter(k=>k.startsWith('DIRECTORY_'));keys.forEach(k=>delete cache[k]);assert.equal(call('getStudentDirectory',params).profile.cache,'miss');
+});
+test('normalized legacy statuses generate same threshold as directory',()=>{
+  resetBackendFixture();
+  for(const d of ['2026-10-05','2026-10-06'])tables.LogPresensi.push(['RAW-'+d,d,'001','Ani','X A',' sakit ',false,'','']);
+  assert.equal(save('2026-10-07').status,'success');
+  assert.equal(call('getStudentDirectory',{token,summary:'true'}).data.students[0].totalSakit,3);
+  assert.equal(tables.PeringatanKasus.filter(r=>r[6]==='AKTIF').length,1);
+});
+test('invalid raw date does not contribute to threshold',()=>{
+  resetBackendFixture();
+  tables.LogPresensi.push(['INVALID','2026-10-00','001','Ani','X A','SAKIT',false,'','']);
+  for(const d of ['2026-10-05','2026-10-06'])assert.equal(save(d).status,'success');
+  assert.equal(tables.PeringatanKasus.filter(r=>r[6]==='AKTIF').length,0);
+});
+test('committed resolution archive survives attendance correction and remains retryable',()=>{
+  resetBackendFixture();
+  for(const d of ['2026-10-05','2026-10-06','2026-10-07'])save(d);
+  const alertId=tables.PeringatanKasus.find(r=>r[6]==='AKTIF')[0];
+  const payload={token,id_peringatan:alertId,nis:'001',fileName:'resolve.pdf',fileBase64:'JVBERi0xLjQK'};
+  failAlertWrite=true;
+  assert.equal(call('resolveCase',payload,true).status,'error');
+  failAlertWrite=false;
+  assert.equal(tables.PenyelesaianKasus.length,2);
+  const beforeUploads=uploads;
+  assert.equal(save('2026-10-07','HADIR').status,'success');
+  assert(tables.PeringatanKasus.some(r=>r[0]===alertId),'Reconcile deleted alert referenced by archive');
+  assert.equal(call('resolveCase',payload,true).status,'success');
+  assert.equal(tables.PenyelesaianKasus.length,2);
+  assert.equal(uploads,beforeUploads);
+  assert.equal(tables.PeringatanKasus.find(r=>r[0]===alertId)[6],'SELESAI');
+});
+test('latest HADIR row cancels older absence for threshold',()=>{
+  resetBackendFixture();
+  tables.LogPresensi.push(['ABS','2026-10-05','001','Ani','X A','SAKIT',false,'',''],['PRESENT','2026-10-05','001','Ani','X A','HADIR',false,'','']);
+  for(const d of ['2026-10-06','2026-10-07'])save(d);
+  assert.equal(call('getStudentDirectory',{token,summary:'true'}).data.students[0].totalSakit,2);
+  assert.equal(tables.PeringatanKasus.filter(r=>r[6]==='AKTIF').length,0);
+});
+test('resave preserves stored FALSE and rejects boolean strings', () => {
+  resetBackendFixture();
+  tables.LogPresensi.push(['RAW','2026-10-05','001','Ani','X A','SAKIT','FALSE','','']);
+  assert.equal(save('2026-10-05').status,'success');
+  assert.equal(call('getLogPresensi',{token,nis:'001'}).data[0].ada_surat_dokter,false);
+  assert.equal(save('2026-10-05','SAKIT',{ada_surat_dokter:'false'}).status,'error');
+});
+test('profile includes cache invalidation before returning from save', () => {
+  resetBackendFixture();
+  let now = fixedNow;
+  const previousNow = ctx.Date.now;
+  ctx.Date.now = () => now;
+  const original = vm.runInContext('DirectoryCache.invalidate',ctx);
+  vm.runInContext('DirectoryCache',ctx).invalidate = () => { now += 37; original.call(vm.runInContext('DirectoryCache',ctx)); };
+  try {
+    const response=call('saveAttendance',{token,profile:'true',date:'2026-10-05',attendances:[{nis:'001',kelas:'X A',status_presensi:'SAKIT'}]},true);
+    assert.equal(response.status,'success');
+    assert.equal(response.profile.gasMs,37);
+  } finally {
+    ctx.Date.now=previousNow;
+    vm.runInContext('DirectoryCache',ctx).invalidate=original;
+  }
+});
+test('archived duplicate closes earlier active same-level duplicate',()=>{
+  resetBackendFixture();
+  for(const d of ['2026-10-05','2026-10-06','2026-10-07'])save(d);
+  const alertId=tables.PeringatanKasus.find(r=>r[6]==='AKTIF')[0];
+  tables.PeringatanKasus.splice(1,0,['LEGACY-DUP','001','Ani','X A',1,3,'AKTIF','2026-10-05']);
+  tables.PenyelesaianKasus.push(['RES',alertId,'001','Ani','X A','https://private/file','','BK','2026-10-08']);
+  assert.equal(save('2026-10-08').status,'success');
+  assert(tables.PeringatanKasus.some(r=>r[0]===alertId && r[6]==='SELESAI'));
+  assert.equal(tables.PeringatanKasus.filter(r=>r[1]==='001' && Number(r[4])===1 && r[6]==='AKTIF').length,0);
+});
+test('gauntlet copy runner verifies findings and cleans all its synthetic rows', () => {
+  resetBackendFixture();
+  const copyId='16-zovxOikdR-qJPcuA_pZJb13U_Ka0sFnCVGE8U7YRQ';
+  props.SPREADSHEET_ID=copyId;
+  ctx.ScriptApp={getScriptId:()=> '1-NpiLFzPdn5d-NkuXVcv1A8Aijaux4eueJYT5gymCuPJM92zaKZ84fkH'};
+  ctx.SpreadsheetApp.getActiveSpreadsheet=()=>({getId:()=>copyId,getSheetByName:sheet});
+  const nonemptyTables=()=>JSON.stringify(Object.fromEntries(Object.entries(tables).map(([name,rows])=>[name,rows.filter(row=>row.some(value=>value!==''))])));
+  const before=nonemptyTables();
+  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'copy-regression.gs'),'utf8'),ctx);
+  const result=vm.runInContext('runCopyGauntletRegression()',ctx);
+  assert.equal(result.status,'PASS');
+  assert(result.checks>=14);
+  assert.equal(nonemptyTables(),before,'Runner must leave all sheet data unchanged after cleanup');
+  assert.equal(Object.keys(props).filter(k=>k.startsWith('SESSION_')).length,1,'Only original logged-in session remains');
+});
+test('completed alert suppresses same-year same-level active duplicates immediately', () => {
+  resetBackendFixture();
+  const alert=seedActiveAlert();
+  tables.PeringatanKasus.push(['DUP','001','Ani','X A',1,3,'AKTIF','2026-10-05']);
+  tables.PeringatanKasus.push(['ALERT-001-2026-2027-2','001','Ani','X A',2,6,'AKTIF','2026-10-08']);
+  tables.PeringatanKasus.push(['ALERT-001-2025-2026-2','001','Ani','X A',2,6,'SELESAI','2025-10-08']);
+  assert.equal(call('resolveCase',{token,id_peringatan:alert[0],nis:'001',fileName:'proof.pdf',fileBase64:'JVBERi0xLjQK'},true).status,'success');
+  const active=call('getPeringatanKasus',{token,status_peringatan:'AKTIF'}).data;
+  assert.equal(active.length,1);
+  assert.equal(active[0].tingkat_kumulatif,2);
+  assert.equal(call('getPeringatanKasus',{token,nis:'001'}).data.length,4,'History still retains all records');
+});
+test('attendance without released files skips cleanup reference reads', () => {
+  resetBackendFixture();
+  for(const name of Object.keys(sheetReads))delete sheetReads[name];
+  assert.equal(save('2026-10-05').status,'success');
+  assert.equal(sheetReads.LogPresensi,1,'Log sheet must be read only for attendance');
+  assert.equal(sheetReads.PenyelesaianKasus||0,0,'No files means no archive reference scan');
 });
 if (failed) process.exitCode = 1;

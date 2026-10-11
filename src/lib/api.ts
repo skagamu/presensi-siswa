@@ -1,6 +1,10 @@
-// Google Apps Script Web App URL
-export const API_URL = process.env.NEXT_PUBLIC_GAS_API_URL ||
-  "https://script.google.com/macros/s/AKfycbxnV2plOOQfhZHhfK--IOzmqaJCXpOpulVxzcwaF7HqE4cZAWJUc52q8yjYt-W3MBcI/exec";
+// Set explicitly per environment so local/test builds cannot silently target another backend.
+export const API_URL = process.env.NEXT_PUBLIC_GAS_API_URL?.trim() || "";
+
+function requireApiUrl() {
+  if (!API_URL) throw new Error("NEXT_PUBLIC_GAS_API_URL belum dikonfigurasi untuk environment ini.");
+  return API_URL;
+}
 
 // ─── Response shape from GAS backend ────────────────────────────────────────
 export interface GasResponse<T = unknown> {
@@ -8,6 +12,11 @@ export interface GasResponse<T = unknown> {
   message?: string;
   data?: T;
   profile?: { gasMs: number; openSpreadsheetMs: number; sheetLookupMs: number; sheetReadMs: number; sheetReads: number; cache?: string };
+}
+
+export interface AttendancePageData {
+  students: Siswa[];
+  logs: LogPresensi[];
 }
 
 // ─── Core transport ──────────────────────────────────────────────────────────
@@ -19,6 +28,7 @@ export async function gasGet<T = unknown>(
   action: string,
   params: Record<string, string> = {}
 ): Promise<GasResponse<T>> {
+  const apiUrl = requireApiUrl();
   const started = Date.now();
   const profiling = process.env.NODE_ENV === "development";
   const qs = new URLSearchParams({ ...params, ...(profiling ? { profile: "true" } : {}), action, token: sessionToken() });
@@ -26,7 +36,13 @@ export async function gasGet<T = unknown>(
   const existing = pendingGets.get(key);
   if (existing) return existing as Promise<GasResponse<T>>;
   const request = (async () => {
-  const res = await fetch(`${API_URL}?${qs}`, { method: "GET", signal: AbortSignal.timeout(60000) });
+  const url = `${apiUrl}?${qs}`;
+  let res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(60000) });
+  // Apps Script can intermittently 404 the ContentService redirect; retrying this read creates a fresh redirect.
+  if (res.status === 404) {
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(60000) });
+  }
   if (!res.ok) throw new Error(`GAS GET ${action} → HTTP ${res.status}`);
   const result = checkSession<T>(await res.json());
   if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
@@ -43,15 +59,19 @@ export async function gasPost<T = unknown>(
   action: string,
   payload: Record<string, unknown> = {}
 ): Promise<GasResponse<T>> {
-  const res = await fetch(API_URL, {
+  const started = Date.now();
+  const profiling = process.env.NODE_ENV === "development";
+  const res = await fetch(requireApiUrl(), {
     method: "POST",
     keepalive: action === "logout",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ ...payload, action, token: action === "login" ? "" : sessionToken() }),
+    body: JSON.stringify({ ...payload, ...(profiling ? { profile: "true" } : {}), action, token: action === "login" ? "" : sessionToken() }),
     signal: AbortSignal.timeout(60000),
   });
   if (!res.ok) throw new Error(`GAS POST ${action} → HTTP ${res.status}`);
-  return checkSession(await res.json());
+  const result = checkSession<T>(await res.json());
+  if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
+  return result;
 }
 
 function sessionToken(): string {
@@ -135,6 +155,9 @@ export const getStudentDetail = (nis: string, tingkat?: string) => gasGet<Studen
 
 export const getSiswa = (tingkat: "X" | "XI" | "XII" | "SEMUA" = "SEMUA") =>
   gasGet<Siswa[]>("getSiswa", { tingkat });
+
+export const getAttendancePageData = (tingkat: "X" | "XI" | "XII", date: string, fresh = false) =>
+  gasGet<AttendancePageData>("getAttendancePageData", { tingkat, date, ...(fresh ? { fresh: "true" } : {}) });
 
 export const getLogPresensi = (params?: {
   nis?: string;

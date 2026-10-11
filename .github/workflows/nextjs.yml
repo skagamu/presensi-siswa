@@ -29,6 +29,8 @@ jobs:
       - name: Typecheck and regressions
         run: npm run typecheck && npm test && npm run lint
       - name: Build with Next.js
+        env:
+          NEXT_PUBLIC_GAS_API_URL: ${{ vars.NEXT_PUBLIC_GAS_API_URL }}
         run: npm run build
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

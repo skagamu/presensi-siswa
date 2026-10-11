@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ export default function SemuaAlertPage() {
   const [alerts, setAlerts] = useState<PeringatanKasus[]>([]);
   const [isFetching, setIsFetching] = useState(true);
   const [isUploading, setIsUploading] = useState<string | null>(null);
+
+  const uploadPending = useRef(false);
 
   const fetchAlerts = async () => {
     setIsFetching(true);
@@ -50,6 +52,7 @@ export default function SemuaAlertPage() {
   const handleUploadResolution = async (alert: PeringatanKasus, e: React.FormEvent<HTMLFormElement>) => {
     const idPeringatan = alert.id_peringatan;
     e.preventDefault();
+    if (uploadPending.current) return;
     const form = e.currentTarget;
     const fileInput = form.querySelector(`input[type="file"]`) as HTMLInputElement | null;
     const notesInput = form.querySelector(`textarea`) as HTMLTextAreaElement | null;
@@ -65,15 +68,17 @@ export default function SemuaAlertPage() {
       if (!validation.valid) {
         return toast.error(validation.error || "File tidak valid.");
       }
+      uploadPending.current = true;
+      setIsUploading(idPeringatan);
       try {
         fileBase64 = await fileToBase64(file);
         fileName = file.name;
       } catch {
+        uploadPending.current = false;
+        setIsUploading(null);
         return toast.error("Gagal membaca file.");
       }
     }
-
-    setIsUploading(idPeringatan);
 
     try {
       const res = await resolveCase({
@@ -88,10 +93,10 @@ export default function SemuaAlertPage() {
       });
       if (res.status === "success") {
         toast.success("Dokumen berhasil diunggah! Kasus ditutup.");
-        setAlerts(alerts.filter(a => a.id_peringatan !== idPeringatan));
+        setAlerts(current => current.filter(a => a.id_peringatan !== idPeringatan));
       } else { toast.error("Gagal resolve: " + res.message); }
     } catch { toast.error("Gagal mengirim perintah resolusi."); }
-    finally { setIsUploading(null); }
+    finally { uploadPending.current = false; setIsUploading(null); }
   };
 
   const getTindakanInfo = (tingkat: number) => {
@@ -162,7 +167,7 @@ export default function SemuaAlertPage() {
                             </div>
                             <div className="space-y-2"><Label htmlFor={`notes-m-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-m-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                           </div>
-                          <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                          <DialogFooter><Button type="submit" disabled={isUploading !== null} className="w-full font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                         </form>
                       </DialogContent>
                     </Dialog>
@@ -238,7 +243,7 @@ export default function SemuaAlertPage() {
                                   </div>
                                   <div className="space-y-2"><Label htmlFor={`notes-d-${alert.id_peringatan}`}>Catatan Tindakan</Label><Textarea id={`notes-d-${alert.id_peringatan}`} placeholder="Tuliskan hasil intervensi..." required /></div>
                                 </div>
-                                <DialogFooter><Button type="submit" disabled={isUploading === alert.id_peringatan} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
+                                <DialogFooter><Button type="submit" disabled={isUploading !== null} className="w-full sm:w-auto font-semibold">{isUploading === alert.id_peringatan ? "Mengunggah..." : "Submit & Tutup Kasus"}</Button></DialogFooter>
                               </form>
                             </DialogContent>
                           </Dialog>
