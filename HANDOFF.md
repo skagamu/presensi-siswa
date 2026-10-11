@@ -1,8 +1,8 @@
 # Handoff Presensi Siswa BK — 11 Oktober 2026
 
 ## Status gauntlet terbaru (menggantikan status lama di bawah)
-Backend TEST aktif v23. Temuan gauntlet diperbaiki dengan builder/critic terpisah dan judge anonim memilih kandidat. 8/8 suite lokal, TypeScript, static build TEST dan lint 0 error lulus. Google live: gauntlet 15 checks, regresi 26 checks, retry, multikelas, dan fault respons setelah commit lulus. UI sintetis save/proof/class-switch dan Bank Kasus lulus; data fixture dibersihkan dan 10 GET cleanup lulus. Endpoint QA sementara sudah dihapus dan penolakannya diverifikasi. Rincian serta batas: GAUNTLET-PROGRESS.md. 404 ContentService tetap belum terjamin selesai; latensi browser masih 3–7 detik pada sampel sebelum cleanup dioptimalkan. Produksi tidak disentuh.
-Paket produksi 10 Oktober belum mencakup perubahan gauntlet; perbarui paket sebelum proposal rilis. Jangan pakai bundle build TEST sebagai frontend produksi.
+Commit lokal `0541b3e` menangani 404 GAS secara terbatas dan race timeout/fresh-read. GAS TEST aktif v27, source bersih tanpa endpoint QA sementara. Lokal: 9/9 suite, TypeScript, static build TEST lulus; lint 0 error/13 warning. Live TEST: gauntlet 15 checks, regression 26, formats 7, retry, concurrency tiga kelas, dan lock barrier saat client timeout PASS; fixture dibersihkan. Smoke transport v27 20/20 tidak menemukan 404, tetapi akar historis 404 belum terpastikan. Produksi/GitHub tidak disentuh.
+Untuk rilis nanti, jalankan [Checklist verifikasi produksi](PRODUCTION-RELEASE-CHECKLIST.md) dan perbarui pasangan artifact frontend/backend. Jangan pakai bundle build TEST sebagai frontend produksi. Rincian hasil dan batas: [GAUNTLET-PROGRESS.md](GAUNTLET-PROGRESS.md).
 
 ## Perbaikan worktree lanjutan (riwayat)
 - Endpoint frontend sekarang tidak memiliki fallback URL. Tanpa `NEXT_PUBLIC_GAS_API_URL`, request berhenti dengan pesan jelas dan static build ditolak. GitHub Pages membaca URL dari repository variable dengan nama yang sama; pemeriksaan GitHub menemukan variable itu belum disetel, jadi isi dengan endpoint produksi yang benar sebelum merge ke `main`.
