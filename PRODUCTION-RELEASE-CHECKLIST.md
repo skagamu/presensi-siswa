@@ -26,7 +26,7 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 - Workflow PR kini menjalankan install, typecheck, regresi, lint, dan static build, sementara job deploy dilewati untuk event pull request. Run PR `38106313833` lulus; 13 warning lint/Next serta warning Node 20 tercatat.
 - Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; artifact frontend/backend perlu dibangun ulang dari commit PR terbaru.
 - Simulasi rollback deployment pada GAS clone lulus: deployment sementara v28 menampilkan marker QA, lalu diarahkan kembali ke v27 dan marker hilang; endpoint kembali menolak akses anonim dengan `UNAUTHORIZED`. Deployment v27 utama tidak diubah, deployment sementara dihapus, dan `@HEAD` dipulihkan ke source v27. Nomor versi v28 tetap ada di histori Apps Script karena versi immutable, tetapi tidak memiliki deployment. Ini menguji rollback versi/deployment, **bukan** migrasi hash password.
-- Unit test lokal mengonfirmasi rollback ke backend produksi lama yang membandingkan password plaintext memerlukan pemulihan kolom password `Users` dari snapshot pra-rilis. Uji alur migrasi kandidat → rollback plaintext pada GAS clone masih perlu dilakukan dengan akun sintetis sebelum cutover.
+- Uji menyeluruh di GAS clone dengan akun sintetis lulus: login pada kandidat hash mengubah password `Users` menjadi `sha256:`; source lama v29 menolak hash; memulihkan nilai password dari snapshot sintetis membuat source lama menerima login lagi. Baris dan sesi sintetis dibersihkan, dua deployment uji dihapus, deployment utama TEST v27 tetap aktif, dan `@HEAD` dikembalikan persis ke snapshot v27. Versi GAS v29/v30 QA tetap immutable di histori tanpa deployment. Ini membuktikan rollback kode saja tidak cukup: saat rollback setelah migrasi, pulihkan juga snapshot kolom password `Users`.
 
 ## A. Sebelum rilis
 
@@ -39,7 +39,7 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 - [ ] **Tidak ada harness uji** — source produksi tidak memuat `runTestSuite`, `getQaResult`, fault injection, NIS sintetis, atau `test_delay_ms`.
 - [x] **Backup saat ini** — snapshot baca-saja spreadsheet produksi dan source GAS aktif dibuat 11 Oktober; ukuran/hash tercatat pada manifest dan folder privat berizin terbatas. Buat ulang bila ada perubahan sebelum cutover.
 - [x] **Rollback deployment GAS** — pemetaan deployment ke versi sebelumnya telah dicoba pada clone TEST; deployment sementara dihapus dan deployment utama tetap di v27.
-- [ ] **Rollback data/auth** — simpan artifact Pages sebelumnya dan catat versi GAS produksi sebelumnya. Uji migrasi password kandidat dan pemulihan sheet `Users` dari snapshot pada clone memakai akun sintetis; rollback kode saja tidak mengembalikan data yang sudah ditulis.
+- [x] **Rollback data/auth pada clone** — alur migrasi password dan pemulihan snapshot `Users` lulus dengan akun sintetis. Sebelum cutover, tetap siapkan snapshot produksi `Users`, artifact Pages sebelumnya, dan versi GAS produksi sebelumnya; rollback kode saja tidak mengembalikan data yang sudah ditulis.
 - [x] **Gerbang CI kandidat** — GitHub Actions PR lulus `npm ci`, `npm run typecheck`, `npm test`, `npm run lint`, dan build static dengan URL produksi. Catat warning yang tersisa sebelum merge.
 - [ ] **Gerbang TEST kandidat** — hasil Gauntlet dan regresi TEST yang dirujuk di [GAUNTLET-PROGRESS.md](GAUNTLET-PROGRESS.md) masih sesuai commit rilis; tidak ada perubahan kode sesudah validasi.
 
