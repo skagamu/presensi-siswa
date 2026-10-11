@@ -16,11 +16,14 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 
 ## Status saat dicek — 11 Oktober 2026
 
-- **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 6 commit di depan dan 0 di belakang `origin/main`; belum dipush.
+- **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 8 commit di depan dan 0 di belakang `origin/main`; belum dipush.
 - Deploy Pages live terakhir berhasil dari `main` pada commit `fdd13e6` (30 September 2026). Workflow pada commit itu berbeda dari kandidat saat ini. Pemeriksaan repository Variables tidak menemukan `NEXT_PUBLIC_GAS_API_URL`; pastikan konfigurasi kandidat menyediakan URL `/exec` produksi sebelum merge. URL yang dipakai artifact live lama belum berhasil diverifikasi.
-- Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru `eb8596d`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
-- Pemeriksaan `clasp deployments` menunjukkan GAS produksi v29. Verifikasi lagi saat rilis.
-- Backup spreadsheet/source yang tersedia bertanggal 10 Oktober; buat backup segar sebelum cutover. Uji rollback auth/password-hash di salinan: dokumen rollback yang ada mencatat kompatibilitas v29 sebagai risiko.
+- **Temuan privasi live:** GET anonim `getSiswa` pada endpoint yang tertanam di Pages live mengembalikan status aplikasi `success`. Saya tidak menampilkan atau menyimpan body/identitas siswa. Tinjau dan tutup akses roster anonim pada backend yang benar sebagai blocker keamanan.
+- Endpoint yang tertanam di Pages live memiliki deployment ID berbeda dari satu-satunya deployment yang ditemukan pada Script ID produksi yang dikonfirmasi. Deployment project tersebut tercatat `@HEAD`; repo `clasp_backend/.clasp.json` justru menunjuk Script ID ketiga. Pastikan pemetaan project/deployment sebelum menyiapkan URL frontend dan push GAS.
+- Source yang ditarik baca-saja dari Script ID terkonfirmasi berbeda dari backend kandidat repo. Source backup privat ada di `/Users/burhanyudha/Documents/Presensi Production Backup 2026-10-11/gas-source`; ini hanya backup source, belum backup spreadsheet atau Script Properties.
+- Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru saat pemeriksaan `0031298`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
+- Pemeriksaan `clasp deployments` sebelumnya menunjukkan v29 untuk project lain; verifikasi deployment GAS target sekali lagi saat rilis.
+- Backup spreadsheet yang tersedia bertanggal 10 Oktober; buat backup spreadsheet segar sebelum cutover. Source GAS dari Script ID terkonfirmasi sudah dicadangkan baca-saja pada 11 Oktober. Uji rollback auth/password-hash di salinan: kompatibilitas dengan backend lama masih berisiko.
 
 ## A. Sebelum rilis
 
@@ -28,6 +31,7 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 - [ ] **Pasangan frontend/backend** — catat kedua versi yang kompatibel. Frontend harus dibangun dengan `NEXT_PUBLIC_GAS_API_URL` produksi; jangan memakai `build:test`.
 - [ ] **GitHub Pages** — pastikan workflow kandidat memperoleh `NEXT_PUBLIC_GAS_API_URL` produksi yang benar dan build berhasil. Bila memakai repository variable, pastikan `vars.NEXT_PUBLIC_GAS_API_URL` sudah diisi; bila memakai sumber konfigurasi lain, verifikasi nilai akhirnya di build. Merge ke `main` memicu workflow deploy otomatis; tinjau Actions sebelum merge.
 - [ ] **GAS** — pastikan project/script ID dan Script Property `SPREADSHEET_ID` menunjuk produksi yang benar; deployment memakai Web App yang benar dan akses/execute-as sesuai konfigurasi yang disetujui.
+- [ ] **Privasi roster** — GET anonim `getSiswa` harus ditolak pada endpoint GAS yang benar; verifikasi tanpa mencetak atau menyalin data siswa.
 - [ ] **Tidak ada harness uji** — source produksi tidak memuat `runTestSuite`, `getQaResult`, fault injection, NIS sintetis, atau `test_delay_ms`.
 - [ ] **Backup baru** — buat snapshot baca-saja spreadsheet produksi dan source GAS aktif; verifikasi file dapat dibaca, ukuran/hash tercatat, serta lokasi privat dan izin akses terbatas. Jangan menganggap backup lama sebagai backup rilis ini.
 - [ ] **Rollback** — simpan artifact Pages sebelumnya dan catat versi GAS produksi sebelumnya. Uji langkah rollback pada salinan; pahami bahwa rollback kode tidak membatalkan data yang sudah ditulis.
