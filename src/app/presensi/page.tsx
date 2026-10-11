@@ -261,6 +261,14 @@ export default function PresensiHarianPage() {
         <p className="text-muted-foreground mt-1 text-sm">Default status siswa adalah HADIR. Klik opsi untuk mengubah & lampirkan bukti.</p>
       </div>
 
+      {!schoolDay && <div role="status" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        {new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 6
+          ? "Hari Sabtu tidak dapat input absen. Pilih tanggal Senin–Jumat."
+          : new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 0
+            ? "Hari Minggu tidak dapat input absen. Pilih tanggal Senin–Jumat."
+            : "Pilih tanggal Senin–Jumat."}
+      </div>}
+
       {(loadError || saveUncertain) && <div role="alert" className="text-sm text-red-600">{loadError || "Respons simpan belum diterima; coba ulangi penyimpanan yang sama atau periksa status."} <Button variant="outline" disabled={isFetching} onClick={retryAttendanceLoad}>{saveUncertain ? "Periksa status" : "Coba lagi"}</Button></div>}
       <div className="grid grid-cols-4 gap-2">
         {(["HADIR", "SAKIT", "IZIN", "ALPHA"] as StatusAbsen[]).map((status) => (
@@ -327,15 +335,7 @@ export default function PresensiHarianPage() {
           </div>
         </div>
 
-        {!schoolDay ? (
-          <div role="status" className="flex min-h-[300px] items-start justify-center p-6 pt-8 text-center text-sm text-gray-600 md:items-center md:pt-6">
-            {new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 6
-              ? "Hari Sabtu tidak dapat input absen. Pilih tanggal Senin–Jumat."
-              : new Date(`${tanggal}T12:00:00+07:00`).getUTCDay() === 0
-                ? "Hari Minggu tidak dapat input absen. Pilih tanggal Senin–Jumat."
-                : "Pilih tanggal Senin–Jumat."}
-          </div>
-        ) : (<>
+        {schoolDay && (<>
         {/* MOBILE VIEW */}
         <div className="block md:hidden divide-y divide-gray-100">
           {(isFetching || (!ready && !loadError && !saveUncertain && schoolDay && !!kelas)) ? (
