@@ -527,7 +527,7 @@ const AttendanceController = {
       rows = SpreadsheetRepository.readSheet(sheet, 'attendanceReadMs'),
       timestamp = TimeHelper.getCurrentTimestamp(),
       links = [];
-    const existing = new Map(rows.slice(1).filter(r => TimeHelper.date(r[1]) === date).map(r => [String(r[2]), r])),
+    const existing = new Map(rows.slice(1).filter(r => seen.has(String(r[2])) && TimeHelper.date(r[1]) === date).map(r => [String(r[2]), r])),
       uploaded = [];
     try {
       const updated = students.filter(s => s.status_presensi !== 'HADIR').map(s => {
@@ -539,7 +539,10 @@ const AttendanceController = {
           nis: s.nis,
           linkBukti: link
         });
-        return [old ? old[0] : 'ATT-' + Utilities.getUuid(), date, s.nis, s.nama, s.kelas, s.status_presensi, s.ada_surat_dokter === undefined ? old?.[6] === true || String(old?.[6]).trim().toUpperCase() === 'TRUE' : s.ada_surat_dokter, link, timestamp];
+        const next = [old ? old[0] : 'ATT-' + Utilities.getUuid(), date, s.nis, s.nama, s.kelas, s.status_presensi, s.ada_surat_dokter === undefined ? old?.[6] === true || String(old?.[6]).trim().toUpperCase() === 'TRUE' : s.ada_surat_dokter, link, timestamp];
+        // Keep unchanged rows intact; alert reconciliation must still run on retries.
+        if (!file && old && TimeHelper.date(old[1]) === date && next.slice(2, 8).every((value, i) => value === old[i + 2])) return old;
+        return next;
       });
     const pending = new Map(updated.map(r => [String(r[2]), r])),
       releasedLinks = students.map(s => {
@@ -549,7 +552,7 @@ const AttendanceController = {
     const result = [rows[0]];
     for (const row of rows.slice(1)) {
       if (!row[2]) continue;
-      if (TimeHelper.date(row[1]) === date && seen.has(String(row[2]))) {
+      if (seen.has(String(row[2])) && TimeHelper.date(row[1]) === date) {
         const replacement = pending.get(String(row[2]));
         if (replacement) result.push(replacement);
         pending.delete(String(row[2]));
@@ -620,8 +623,10 @@ const AlertService = {
       days = new Map();
     const targets = new Map(students.map(student => [String(student.nis), student]));
     for (const r of logs) {
-      const d = TimeHelper.date(r[1]), nis = String(r[2]), status = String(r[5] || '').trim().toUpperCase();
-      if (!targets.has(nis) || d < year.start || d > year.end || !TimeHelper.school(d) || !['HADIR', 'SAKIT', 'IZIN', 'ALPHA'].includes(status)) continue;
+      const nis = String(r[2]);
+      if (!targets.has(nis)) continue;
+      const d = TimeHelper.date(r[1]), status = String(r[5] || '').trim().toUpperCase();
+      if (d < year.start || d > year.end || !TimeHelper.school(d) || !['HADIR', 'SAKIT', 'IZIN', 'ALPHA'].includes(status)) continue;
       if (!days.has(nis)) days.set(nis, new Set());
       if (status === 'HADIR') days.get(nis).delete(d);
       else days.get(nis).add(d);

@@ -14,6 +14,7 @@ const tables = {
 };
 const initialTables = JSON.parse(JSON.stringify(tables));
 const sheetReads = {};
+let attendanceWrites = 0;
 let uploads = 0,
   failUpload = false,
   failLogWrite = false,
@@ -35,6 +36,7 @@ const sheet = name => ({
   getRange: (row, col, n = 1, m = 1) => ({
     getValues: () => { assert.equal(writerInFlight, false, 'sheet read must wait until the simulated writer releases its lock'); sheetReads[name] = (sheetReads[name] || 0) + 1; return tables[name].slice(row - 1, row - 1 + n).map(r => r.slice(col - 1, col - 1 + m)); },
     setValues: values => {
+      if (name === 'LogPresensi') attendanceWrites++;
       if (name === 'LogPresensi' && failLogWrite || name === 'PeringatanKasus' && failAlertWrite || name === 'PenyelesaianKasus' && failResolutionArchive) throw Error('injected sheet write failure');
       values.forEach((v, i) => {
         tables[name][row - 1 + i] ??= [];
@@ -841,5 +843,18 @@ test('attendance without released files skips cleanup reference reads', () => {
   assert.equal(save('2026-10-05').status,'success');
   assert.equal(sheetReads.LogPresensi,1,'Log sheet must be read only for attendance');
   assert.equal(sheetReads.PenyelesaianKasus||0,0,'No files means no archive reference scan');
+});
+test('identical save preserves last changed timestamp while correction updates it', () => {
+  resetBackendFixture();
+  assert.equal(save('2026-10-05').status, 'success');
+  tables.LogPresensi[1][8] = '2026-10-05 07:00:00';
+  tables.LogPresensi[1][1] = new ctx.Date('2026-10-05T00:00:00Z');
+  const original = JSON.stringify(tables.LogPresensi);
+  const beforeWrites = attendanceWrites;
+  assert.equal(save('2026-10-05').status, 'success');
+  assert.equal(JSON.stringify(tables.LogPresensi), original);
+  assert.equal(attendanceWrites, beforeWrites, 'unchanged Date cells must not be rewritten');
+  assert.equal(call('saveAttendance', {token, date:'2026-10-05', attendances:[{nis:'001',kelas:'X A',status_presensi:'IZIN'}]}, true).status, 'success');
+  assert.notEqual(tables.LogPresensi[1][8], '2026-10-05 07:00:00');
 });
 if (failed) process.exitCode = 1;
