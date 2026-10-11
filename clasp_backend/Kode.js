@@ -327,11 +327,17 @@ const SpreadsheetRepository = {
     if (RequestProfile.enabled) RequestProfile.metrics.sheetReads++;
     return RequestProfile.measure(field, () => sheet.getDataRange().getValues());
   },
+  readRange(name, row, column, width) {
+    const sheet = this.getSheet(name), count = sheet.getLastRow() - row + 1;
+    if (count <= 0) return [];
+    if (RequestProfile.enabled) RequestProfile.metrics.sheetReads++;
+    return RequestProfile.measure('sheetReadMs', () => sheet.getRange(row, column, count, width).getValues());
+  },
   getStudentsBySheet(name) {
-    return this.readRows(name).slice(1).filter(r => r[2] && r[3]).map(r => ({
-      kelas: String(r[1]).trim(),
-      nis: String(r[2]).trim(),
-      nama: String(r[3]).trim()
+    return this.readRange(name, 2, 2, 3).filter(r => r[1] && r[2]).map(r => ({
+      kelas: String(r[0]).trim(),
+      nis: String(r[1]).trim(),
+      nama: String(r[2]).trim()
     }));
   },
   students() {
@@ -355,6 +361,16 @@ const SpreadsheetRepository = {
       link_bukti_izin: r[7],
       waktu_simpan: r[8]
     }));
+  },
+  directorySummaryLogs(p) {
+    return filterRecords(this.readRange(CONFIG.SHEETS.LOG_PRESENSI, 2, 2, 5).filter(r => r[1]).map(r => ({
+      tanggal: TimeHelper.date(r[0]), nis: String(r[1]), kelas: r[3], status_presensi: String(r[4] || '').trim().toUpperCase()
+    })), p, 'tanggal');
+  },
+  directorySummaryCases(p) {
+    return filterRecords(this.readRange(CONFIG.SHEETS.BANK_KASUS, 2, 1, 5).filter(r => r[0]).map(r => ({
+      tanggal: TimeHelper.date(r[1]), nis: String(r[2]), kelas: r[4]
+    })), p, 'tanggal');
   },
   insertBatch(name, rows) {
     if (rows.length) this.getSheet(name).getRange(this.getSheet(name).getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
@@ -442,9 +458,10 @@ const StudentController = {
       ? SpreadsheetRepository.getStudentsBySheet(CONFIG.SHEETS['SISWA_' + p.tingkat]).map(s => ({ ...s, tingkat: p.tingkat }))
       : SpreadsheetRepository.students();
     const students = roster.filter(s => !p.nis || s.nis === String(p.nis));
-    const logs = filterRecords(SpreadsheetRepository.logs(), p, 'tanggal');
-    const kasus = BankKasusController.list(p);
-    if (p.summary === 'true') {
+    const isSummary = p.summary === 'true';
+    const logs = isSummary ? SpreadsheetRepository.directorySummaryLogs(p) : filterRecords(SpreadsheetRepository.logs(), p, 'tanggal');
+    const kasus = isSummary ? SpreadsheetRepository.directorySummaryCases(p) : BankKasusController.list(p);
+    if (isSummary) {
       const summaries = new Map(students.map(s => [s.nis, { ...s, totalAlpha: 0, totalSakit: 0, totalIzin: 0, totalPelanggaran: 0 }]));
       const days = new Map(), fields = { ALPHA: 'totalAlpha', SAKIT: 'totalSakit', IZIN: 'totalIzin' };
       for (const log of logs) {

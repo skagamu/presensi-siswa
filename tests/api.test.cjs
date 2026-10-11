@@ -89,6 +89,25 @@ const success = url => ({ ok: true, status: 200, url, redirected: true, json: as
   configured.fetch = async url => { attempts++; return { ok: false, status: 503, url, redirected: false, json: async () => ({}) }; };
   await assert.rejects(configured.exports.saveAttendance('2026-10-07', []), /HTTP 503/);
   assert.equal(attempts, 1, 'writes are never automatically retried');
+
+  let activeToken = 'old-session', expired = 0, reply;
+  configured.window.localStorage = { getItem: () => activeToken };
+  configured.window.dispatchEvent = () => { expired++; };
+  const unauthorized = { status: 'error', code: 'UNAUTHORIZED' };
+  configured.fetch = () => new Promise(resolve => { reply = resolve; });
+  for (const method of ['gasGet', 'gasPost']) {
+    activeToken = 'old-session';
+    const pending = configured.exports[method]('getSiswa');
+    activeToken = 'new-session';
+    reply({ ok: true, json: async () => unauthorized });
+    await pending;
+    assert.equal(expired, 0, 'old unauthorized reply must not revoke a newer login');
+  }
+  configured.fetch = async () => ({ ok: true, json: async () => unauthorized });
+  await configured.exports.gasGet('getSiswa');
+  assert.equal(expired, 1, 'current expired session must notify AuthContext');
+  await configured.exports.gasPost('login');
+  assert.equal(expired, 1, 'anonymous login reply must not invalidate an existing session');
   configured.fetch = healthy;
   await configured.exports.saveAttendance('2026-10-07', []);
   console.log('GAS transport distinguishes one-time redirect 404 from deployment/auth failures; writes remain single-attempt');

@@ -1,5 +1,9 @@
 # Checklist verifikasi produksi — Presensi Siswa BK
 
+## Kandidat terbaru 11 Oktober 2026
+
+Branch `codex/final-test-validation` berisi perubahan setelah rilis historis di bawah. GAS TEST aktif v33; deployment produksi dari repository variable tetap v30 (dicek baca-saja). Iterasi ini memperbaiki parity kasus, sesi lama, dan cache detail 30 detik. Build TEST serta build dengan URL produksi yang diverifikasi dari GitHub variable lulus; paket frontend produksi tidak memuat URL TEST. Belum ada push atau deployment kandidat ini ke produksi. Setelah aktivasi, ulangi smoke baca-saja B dan canary bisnis C untuk pasangan versi baru, tanpa fixture sintetis di produksi.
+
 Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi waktu dan bukti singkat. Jangan menjalankan tes yang membuat/mengubah/menghapus data bisnis di spreadsheet produksi. Semua skenario tulis, retry paksa, fault injection, concurrency, dan cleanup harus tetap di spreadsheet TEST.
 
 ## Konteks rilis
