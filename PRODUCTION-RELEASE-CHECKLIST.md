@@ -16,24 +16,23 @@ Gunakan dokumen ini pada hari rilis. Tandai `PASS`, `FAIL`, atau `BLOCKED`, isi 
 
 ## Status saat dicek — 11 Oktober 2026
 
-- **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 8 commit di depan dan 0 di belakang `origin/main`; belum dipush.
-- Deploy Pages live terakhir berhasil dari `main` pada commit `fdd13e6` (30 September 2026). Workflow pada commit itu berbeda dari kandidat saat ini. Pemeriksaan repository Variables tidak menemukan `NEXT_PUBLIC_GAS_API_URL`; pastikan konfigurasi kandidat menyediakan URL `/exec` produksi sebelum merge. URL yang dipakai artifact live lama belum berhasil diverifikasi.
-- **Temuan privasi live:** GET anonim `getSiswa` pada endpoint yang tertanam di Pages live mengembalikan status aplikasi `success`. Saya tidak menampilkan atau menyimpan body/identitas siswa. Tinjau dan tutup akses roster anonim pada backend yang benar sebagai blocker keamanan.
-- Endpoint yang tertanam di Pages live memiliki deployment ID berbeda dari satu-satunya deployment yang ditemukan pada Script ID produksi yang dikonfirmasi. Deployment project tersebut tercatat `@HEAD`; repo `clasp_backend/.clasp.json` justru menunjuk Script ID ketiga. Pastikan pemetaan project/deployment sebelum menyiapkan URL frontend dan push GAS.
-- Source yang ditarik baca-saja dari Script ID terkonfirmasi berbeda dari backend kandidat repo. Source backup privat ada di `/Users/burhanyudha/Documents/Presensi Production Backup 2026-10-11/gas-source`; ini hanya backup source, belum backup spreadsheet atau Script Properties.
-- Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru saat pemeriksaan `0031298`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
-- Pemeriksaan `clasp deployments` sebelumnya menunjukkan v29 untuk project lain; verifikasi deployment GAS target sekali lagi saat rilis.
-- Backup spreadsheet yang tersedia bertanggal 10 Oktober; buat backup spreadsheet segar sebelum cutover. Source GAS dari Script ID terkonfirmasi sudah dicadangkan baca-saja pada 11 Oktober. Uji rollback auth/password-hash di salinan: kompatibilitas dengan backend lama masih berisiko.
+- **Belum siap merge/deploy.** Branch `codex/presensi-repairs` bersih, 9 commit di depan dan 0 di belakang `origin/main`; belum dipush.
+- Pages live memakai deployment GAS v29 pada Script ID `1yd9...`, sama dengan target yang dikonfirmasi. `.clasp.json` repo juga menunjuk project ini. Repository variable `NEXT_PUBLIC_GAS_API_URL` sudah diisi dengan endpoint tersebut; kandidat static build lokal dengan URL itu lulus.
+- **Temuan privasi live:** GET anonim `getSiswa` pada endpoint produksi mengembalikan status aplikasi `success`. Ekspor Google Sheets tanpa sesi juga mengunduh XLSX valid. Isi roster tidak dicetak atau diperiksa; batasi akses spreadsheet dan tutup akses endpoint anonim sebagai blocker keamanan.
+- Source GAS produksi v29 berbeda dari kandidat repo: source live lama membaca spreadsheet produksi secara hard-coded dan tidak mewajibkan sesi untuk `getSiswa`. Kandidat repo mewajibkan sesi. Untuk cutover, update deployment v29 yang sama setelah mengonfirmasi Script Property `SPREADSHEET_ID` menunjuk sheet produksi.
+- Backup privat bertanggal 11 Oktober berisi XLSX produksi dan source GAS aktif: `/Users/burhanyudha/Documents/Presensi Production Backup 2026-10-11/`. Manifest mencatat SHA-256 dan batas backup; Script Properties serta file Drive belum dicadangkan.
+- Paket `Presensi Release 2026-10-10/reviewable` masih memakai source commit `a6597d3`; source kandidat terbaru saat pemeriksaan `d53e1cc`. Artifact frontend/backend perlu dibangun ulang untuk commit yang sama.
+- Uji rollback password perlu dilakukan di salinan: source lama membandingkan password plaintext sedangkan kandidat memutakhirkan password ke hash saat login, sehingga rollback langsung dapat menggagalkan login akun yang sudah bermigrasi.
 
 ## A. Sebelum rilis
 
 - [ ] **Branch dan commit** — tinjau seluruh diff, commit terpilih sama dengan yang sudah diuji; working tree bersih.
 - [ ] **Pasangan frontend/backend** — catat kedua versi yang kompatibel. Frontend harus dibangun dengan `NEXT_PUBLIC_GAS_API_URL` produksi; jangan memakai `build:test`.
 - [ ] **GitHub Pages** — pastikan workflow kandidat memperoleh `NEXT_PUBLIC_GAS_API_URL` produksi yang benar dan build berhasil. Bila memakai repository variable, pastikan `vars.NEXT_PUBLIC_GAS_API_URL` sudah diisi; bila memakai sumber konfigurasi lain, verifikasi nilai akhirnya di build. Merge ke `main` memicu workflow deploy otomatis; tinjau Actions sebelum merge.
-- [ ] **GAS** — pastikan project/script ID dan Script Property `SPREADSHEET_ID` menunjuk produksi yang benar; deployment memakai Web App yang benar dan akses/execute-as sesuai konfigurasi yang disetujui.
-- [ ] **Privasi roster** — GET anonim `getSiswa` harus ditolak pada endpoint GAS yang benar; verifikasi tanpa mencetak atau menyalin data siswa.
+- [ ] **GAS** — targetnya Script ID `1yd9...`, deployment v29. Pastikan Script Property `SPREADSHEET_ID` menunjuk sheet produksi yang dikonfirmasi; pertahankan endpoint Web App yang sama dan verifikasi execute-as/akses.
+- [ ] **Privasi roster** — batasi sharing spreadsheet (akses GAS berjalan sebagai pemilik/deployer), GET anonim `getSiswa` harus `UNAUTHORIZED`, dan ekspor anonim Google Sheets harus ditolak. Verifikasi tanpa mencetak atau menyalin data siswa.
 - [ ] **Tidak ada harness uji** — source produksi tidak memuat `runTestSuite`, `getQaResult`, fault injection, NIS sintetis, atau `test_delay_ms`.
-- [ ] **Backup baru** — buat snapshot baca-saja spreadsheet produksi dan source GAS aktif; verifikasi file dapat dibaca, ukuran/hash tercatat, serta lokasi privat dan izin akses terbatas. Jangan menganggap backup lama sebagai backup rilis ini.
+- [x] **Backup saat ini** — snapshot baca-saja spreadsheet produksi dan source GAS aktif dibuat 11 Oktober; ukuran/hash tercatat pada manifest dan folder privat berizin terbatas. Buat ulang bila ada perubahan sebelum cutover.
 - [ ] **Rollback** — simpan artifact Pages sebelumnya dan catat versi GAS produksi sebelumnya. Uji langkah rollback pada salinan; pahami bahwa rollback kode tidak membatalkan data yang sudah ditulis.
 - [ ] **Gerbang CI kandidat** — GitHub Actions lulus `npm ci`, `npm run typecheck`, `npm test`, `npm run lint`, dan build static menggunakan URL produksi. Warning lint/Next yang disetujui dicatat; tidak ada error.
 - [ ] **Gerbang TEST kandidat** — hasil Gauntlet dan regresi TEST yang dirujuk di [GAUNTLET-PROGRESS.md](GAUNTLET-PROGRESS.md) masih sesuai commit rilis; tidak ada perubahan kode sesudah validasi.
