@@ -133,3 +133,54 @@ Profil akhir mengukur full summary 468 entri (467 roster + 1 sintetis), reset ha
 ## Putaran akhir: respons save hilang
 Critic mereproduksi status lama kembali setelah server sudah commit tetapi respons gagal, lalu pengguna berpindah kelas. Frontend kini meminta data otoritatif dengan `fresh=true` saat pindah kelas setelah kegagalan save. Jika refresh ikut gagal, loaded key dihapus dan tombol Simpan tetap disabled dengan pesan error; refresh berhasil memulihkan status dan tautan bukti server. Retry langsung di kelas yang sama tetap mempertahankan draft. Tes regresi mencakup commit IZIN+bukti, respons gagal, refresh gagal, refresh ulang berhasil, lalu save tanpa upload ulang.
 Perbandingan buta A/B di atas mendahului patch akhir ini; patch akhir diperiksa critic frontend secara terpisah. Fresh GET hanya menjamin rekonsiliasi write yang sudah commit; timeout ketika write masih berjalan dapat berlomba dengan GET dan belum diuji sebagai jaminan transaksi menyeluruh.
+
+## Optimasi baca direktori siswa — 11 Oktober 2026
+
+- Profil GAS TEST menunjukkan jalur ringkasan direktori membaca satu baris penuh dari beberapa sheet, padahal hanya memerlukan kolom tanggal, NIS, kelas, dan status. Repository kini membaca rentang kolom yang diperlukan saja; jalur detail tetap memakai pembacaan lengkap.
+- Perbandingan memakai runner `route()` dan dataset sintetis yang sama, masing-masing tiga kali. Median ringkasan dingin: GAS 2.052 → 1.487 ms (-27,5%); waktu baca Sheets terukur 1.322 → 509 ms (-61,5%). Cache hit 119 → 125 ms, praktis tidak berubah. Jumlah panggilan baca tetap lima pada kasus roster penuh; pengurangan berasal dari lebar data yang dibaca. Angka ini adalah profil route GAS langsung, bukan HTTP/browser atau produksi.
+- Kandidat TEST aktif di deployment v32. `runCopyGauntletRegression` lulus 15 pemeriksaan dan `runCopyRegression` lulus 26 pemeriksaan sesudah kandidat dipulihkan ke HEAD TEST. Sumber GAS TEST tetap kandidat; produksi dan GitHub tidak disentuh.
+- Validasi lokal kandidat: 9/9 suite Node, TypeScript, dan static build TEST lulus. Lint sebelumnya 0 error dengan 13 warning lama. Perubahan menyentuh `clasp_backend/Kode.js` dan fixture `tests/backend.test.cjs`.
+- Karena perbandingan GAS dilakukan dalam rangkaian terpisah dan runtime Google bervariasi, persentase tersebut adalah hasil median sampel TEST, bukan jaminan latensi pengguna. Belum ada pengukuran HTTP/browser pascaperubahan.
+
+## Browser TEST setelah optimasi baca direktori — 11 Oktober 2026
+
+- Aplikasi dijalankan lokal dengan `npm run dev:test`, yang mengarahkan API hanya ke deployment GAS TEST. Login TEST berhasil; roster direktori tampil lengkap 467/467. Detail dua siswa sintetis/non-sintetis yang dipilih tampil dengan riwayat berbeda dan overlay pemuatan tertutup setelah data tersedia. Pengujian hanya membaca; tidak ada presensi atau kasus yang disimpan. Sesi di-logout sesudah uji.
+- Observasi click-to-roster sekitar 5,6 detik dan click-to-detail sekitar 4,6 detik. Pengukuran memakai siklus klik dan pembacaan accessibility tree berulang, sehingga mencakup overhead alat observasi dan bukan timing browser/network murni. Angka ini tidak cocok untuk menghitung persentase peningkatan atau menyimpulkan performa produksi.
+- Hasil fungsional browser PASS; waktu UI belum tervalidasi presisi. Pengukuran sebelumnya di browser juga memakai kondisi/waktu berbeda, jadi tidak ada perbandingan A/B UI yang setara.
+
+## Uji ulang pengiriman ContentService TEST — 11 Oktober 2026
+
+- Tanpa mengirim token/sesi, endpoint TEST dipanggil 10 kali berurutan dan 5 kali serentak. Semua respons mengikuti redirect ContentService, berakhir HTTP 200 dengan `UNAUTHORIZED` seperti yang diharapkan, dan tidak ada 404/timeout. Sampel serial 1.011–1.823 ms; sampel serentak 1.756–1.993 ms.
+- Ini hanya smoke test ketersediaan endpoint TEST dan redirect untuk respons tanpa sesi, bukan pembuktian 404 intermiten sudah hilang. Pembacaan terautentikasi melalui UI juga berhasil pada sesi browser tadi, tetapi jumlah sampelnya kecil. Produksi tidak disentuh.
+
+## Gauntlet final terukur — 11 Oktober 2026 (acuan terbaru)
+
+### Temuan dan perbaikan
+- Regresi narrow-read kasus: summary menghitung baris BankKasus tanpa ID, sementara detail mengabaikannya. Kandidat membaca A:E dan memfilter ID seperti jalur asli. Fixture ID kosong lulus; tidak ada migrasi data.
+- Sesi: UNAUTHORIZED dari request lama dapat membatalkan sesi login yang lebih baru. GET/POST kini menyimpan token request dan hanya memberi event kedaluwarsa jika token itu masih menjadi token aktif. Fixture GET, POST, dan login anonim lulus.
+- Detail: membuka ulang siswa yang sama selalu melewati HTTP. Cache dalam instance halaman berlaku maksimum 30 detik dari klik yang mengambil data, tidak diperpanjang saat hit. Refresh/unmount membuang cache; stale response dan failure tidak mengisinya. TTL, refresh, race, failure/retry diuji.
+
+### Browser A/B langsung
+Viewport kedua varian ditetapkan 1280x900. Tab, login TEST, deployment GAS v33, siswa, dan data sama; halaman di-reload saat mengganti varian. Baseline memakai file page.tsx yang disimpan sebelum iterasi; transport dan backend yang sama digunakan untuk kedua varian agar perubahan cache UI terisolasi. Timer [BK_UI] berjalan dari event handler hingga dua animation frames setelah commit React; [BK_PERF] mengukur fetch+JSON serta profil GAS. Waktu akses tool tidak masuk timer. Ini proksi render setelah commit, bukan pengukuran pixel present pada display fisik. Data identitas tidak dimasukkan laporan.
+
+| Buka ulang detail (3 sampel) | Baseline | Kandidat |
+| --- | --- | --- |
+| Event-ke-render ms | 2174, 1811, 2233 | 324, 192, 195 |
+| Median ms | 2174 | 195 |
+| HTTP tambahan | 3 (cache GAS hit) | 0 (cache halaman) |
+
+Median turun 91,0% pada skenario buka ulang dalam TTL. Ini perbandingan cache UI yang terukur, bukan klaim pembukaan pertama turun 91%. Hasil dan empat riwayat yang ditampilkan tetap sama. Cache TTL juga teramati habis dalam browser: setelah >30 detik, satu HTTP baru terjadi; tiga buka ulang berikutnya tidak menambah HTTP.
+
+Pembukaan awal di browser masih lambat: detail HTTP 3868–3972 ms, GAS 2134–2360 ms, render total 4360–4381 ms pada dua sampel kandidat sebelum A/B desktop. Ringkasan 467 siswa: HTTP3481/GAS1871/render4005 ms; refresh HTTP3515/GAS1769/render3974 ms. Sebagian besar delay adalah GAS dan overhead pengiriman/jaringan; render menambah sekitar 0,4–0,5 detik. Tidak dilakukan pagination atau migrasi backend karena belum diperlukan untuk mempertahankan scope dan integritas.
+
+### Transport, integritas, dan gauntlet
+- TEST source/deployment v33 dipasang sesudah remote source dicocokkan dengan baseline v32; v32 dan source baseline tersedia untuk rollback TEST. Produksi tidak diubah dalam iterasi ini.
+- 12 GET HTTP terautentikasi (summary/detail, masing-masing 3 fresh dan 3 warm) lulus HTTP200, redirect, dan equality hasil. Roster467; tidak ada 404/timeout dalam sampel. Fresh summary HTTP3509–4808ms; warm1248–1588ms. Fresh detail3039–4861ms; warm1403–1791ms. Sesi CLI di-logout.
+- Regresi transport meliputi redirect404 sementara→retry1→success,404persistent→error setelah2attempts, direct404/403 tanpa retry, POST single-attempt, dan sesi lama tidak membatalkan sesi baru. TypeError/CORS tetap ditampilkan sebagai kegagalan; tidak menganggap seluruh 404 dapat dipulihkan.
+- Bukti TEST timeout writer yang sudah mengambil lock tetap berlaku karena kode barrier tidak berubah: client700ms timeout, backend delay4000ms lalu commit, freshGET menunggu lock4554ms dan melihat satu log. Tes integritas lokal dan uncertain-save tetap lulus; tidak ada fault injection produksi.
+- Critic buta independen menjalankan 3 file yang sama pada A/B: kandidat A lulus semuanya; baseline B gagal semuanya. Critic memilih A dan mengulang pemeriksaan TTL terakhir; tidak menemukan blocker persiapan rilis baru. Critic tidak mereproduksi sendiri metrik browser live; metrik dihimpun lead melalui log aplikasi.
+
+### Status keputusan
+Kandidat memenuhi gerbang fungsi, parity, cache/invalidation, pengukuran browser langsung, dan kegagalan aman dalam scope TEST. 404 adalah risiko upstream yang dimitigasi, bukan temuan yang diklaim musnah. Bagian lama yang mengatakan tidak ada pengukuran UI presisi atau branch/deployment berbeda adalah sejarah. Rilis produksi masih perlu aktivasi pasangan frontend/backend kandidat dan smoke baca-saja; jangan mengirim build TEST ke Pages.
+
+Gerbang final pada source kandidat: 9/9 file tes, TypeScript, sintaks GAS, lint0error/13warning lama, static build TEST, dan static build dengan URL API produksi yang dibaca dari repository variable lulus. Pemeriksaan bundle membuktikan URL produksi ada dan URL TEST tidak ada. Backend kandidat tidak memuat endpoint QA/fault injection/setupDatabase/injectMassiveDummy. Pemeriksaan deployment baca-saja: TESTv33 dan deployment produksi yang dipakai Pages masihv30. Browser TEST di-logout dan viewport override dipulihkan. Tidak ada data bisnis TEST/produksi yang ditulis pada iterasi ini; hanya sumber/deployment TEST dan sesi autentikasi uji berubah.

@@ -31,7 +31,8 @@ export async function gasGet<T = unknown>(
   const apiUrl = requireApiUrl();
   const started = Date.now();
   const profiling = process.env.NODE_ENV === "development";
-  const qs = new URLSearchParams({ ...params, ...(profiling ? { profile: "true" } : {}), action, token: sessionToken() });
+  const token = sessionToken();
+  const qs = new URLSearchParams({ ...params, ...(profiling ? { profile: "true" } : {}), action, token });
   const key = qs.toString();
   const existing = pendingGets.get(key);
   if (existing) return existing as Promise<GasResponse<T>>;
@@ -50,7 +51,7 @@ export async function gasGet<T = unknown>(
     console.warn("[BK_API]", JSON.stringify({ action, method: "GET", status: res.status, host, redirected: res.redirected, elapsedMs: Date.now() - started }));
     throw new Error(`GAS GET ${action} → HTTP ${res.status}${host ? ` (${host})` : ""}`);
   }
-  const result = checkSession<T>(await res.json());
+  const result = checkSession<T>(await res.json(), token);
   if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
   return result;
   })();
@@ -72,15 +73,16 @@ export async function gasPost<T = unknown>(
 ): Promise<GasResponse<T>> {
   const started = Date.now();
   const profiling = process.env.NODE_ENV === "development";
+  const token = action === "login" ? "" : sessionToken();
   const res = await fetch(requireApiUrl(), {
     method: "POST",
     keepalive: action === "logout",
     headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ ...payload, ...(profiling ? { profile: "true" } : {}), action, token: action === "login" ? "" : sessionToken() }),
+    body: JSON.stringify({ ...payload, ...(profiling ? { profile: "true" } : {}), action, token }),
     signal: AbortSignal.timeout(60000),
   });
   if (!res.ok) throw new Error(`GAS POST ${action} → HTTP ${res.status}`);
-  const result = checkSession<T>(await res.json());
+  const result = checkSession<T>(await res.json(), token);
   if (profiling && result.profile) console.info("[BK_PERF]", JSON.stringify({ action, httpMs: Date.now() - started, ...result.profile }));
   return result;
 }
@@ -90,8 +92,8 @@ function sessionToken(): string {
   return window.localStorage.getItem("bk_auth_token") || "";
 }
 
-function checkSession<T>(response: GasResponse<T> & { code?: string }): GasResponse<T> {
-  if (response.code === "UNAUTHORIZED" && typeof window !== "undefined") {
+function checkSession<T>(response: GasResponse<T> & { code?: string }, token: string): GasResponse<T> {
+  if (response.code === "UNAUTHORIZED" && token && token === sessionToken() && typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("bk-session-expired"));
   }
   return response;

@@ -33,6 +33,7 @@ const sheet = name => ({
   }),
   getLastRow: () => tables[name].length,
   getRange: (row, col, n = 1, m = 1) => ({
+    getValues: () => { assert.equal(writerInFlight, false, 'sheet read must wait until the simulated writer releases its lock'); sheetReads[name] = (sheetReads[name] || 0) + 1; return tables[name].slice(row - 1, row - 1 + n).map(r => r.slice(col - 1, col - 1 + m)); },
     setValues: values => {
       if (name === 'LogPresensi' && failLogWrite || name === 'PeringatanKasus' && failAlertWrite || name === 'PenyelesaianKasus' && failResolutionArchive) throw Error('injected sheet write failure');
       values.forEach((v, i) => {
@@ -534,6 +535,7 @@ test('directory summary returns only grouped current-year pupil counts', () => {
     ['SUM-7','2026-10-22','002','Budi','X A','HADIR',false,'','2026-10-22'],
     ['SUM-8','2026-10-00','002','Budi','X A','ALPHA',false,'','2026-10-00']);
   tables.BankKasus.push(['SUM-BK','2026-10-20','002','Budi','X A','Terlambat','2026-10-20']);
+  tables.BankKasus.push(['','2026-10-20','002','Budi','X A','Incomplete row','2026-10-20']);
   const response=call('getStudentDirectory',{token,summary:'true',academic_year:'2026/2027'});
   assert.deepEqual(Object.keys(response.data),['students']);
   const pupil=response.data.students.find(s=>s.nis==='002');
@@ -722,7 +724,7 @@ test('partial attendance uploads are cleaned when a later file fails', () => {
 test('directory cache is scoped, authorized, bypassable and invalidated on writes', () => {
   resetBackendFixture();
   const params={token,summary:'true',profile:'true'};
-  const cold=call('getStudentDirectory',params);assert.equal(cold.profile.cache,'miss');assert.equal(cold.profile.sheetReads,5);
+  const cold=call('getStudentDirectory',params);assert.equal(cold.profile.cache,'miss');assert.equal(cold.profile.sheetReads,1);
   const warm=call('getStudentDirectory',params);assert.equal(warm.profile.cache,'hit');assert.equal(warm.profile.sheetReads,0);assert.deepEqual(warm.data,cold.data);
   assert.equal(call('getStudentDirectory',{summary:'true',profile:'true'}).code,'UNAUTHORIZED');
   const detail=call('getStudentDirectory',{token,nis:'001',tingkat:'X',profile:'true'});assert.equal(detail.profile.sheetReads,4);assert.equal(detail.data.students.length,1);

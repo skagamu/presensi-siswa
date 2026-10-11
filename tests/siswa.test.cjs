@@ -2,7 +2,8 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const states=[],refs=[],effects=[];let si=0,ri=0,ei=0,jobs=[],tree,summaries=0;
 const details=[],summary=[{nis:'001',nama:'Ani',kelas:'X A',tingkat:'X',totalAlpha:3,totalSakit:2,totalIzin:1,totalPelanggaran:4}];
 const jsx=(type,props)=>({type,props});
-const ctx={exports:{},console,require(name){
+let clock=1000;
+const ctx={exports:{},console,Date:{now:()=>clock},require(name){
  if(name==='react')return {
   useState(v){const i=si++;if(!(i in states))states[i]=typeof v==='function'?v():v;return [states[i],v=>states[i]=typeof v==='function'?v(states[i]):v];},
   useRef(v){return refs[ri++]||=( {current:v});},useMemo(fn){return fn();},
@@ -32,6 +33,14 @@ const payload={status:'success',data:{students:summary,logs:[{nis:'001',tanggal:
  await refresh().props.onClick();await settle();details[0].resolve(payload);await first;await settle();assert.equal(modal().props.isOpen,false,'stale detail after refresh must not open modal');
  const second=detailButton().props.onClick({stopPropagation(){}});await settle();details[1].resolve(payload);await second;await settle();assert.equal(modal().props.isOpen,true);assert.equal(modal().props.siswa.totalAlpha,3);assert.equal(modal().props.siswa.totalPelanggaran,4);assert.equal(modal().props.siswa.logs[0].linkBukti,'proof');
  assert.equal(loadingDialog().props.open,false);
- const failed=detailButton().props.onClick({stopPropagation(){}});await settle();assert.equal(loadingDialog().props.open,true);details[2].resolve({status:'error',message:'offline'});await failed;await settle();assert.equal(loadingDialog().props.open,false);
+ modal().props.onClose();await settle();
+ const cached=detailButton().props.onClick({stopPropagation(){}});await settle();
+ assert.equal(details.length,2,'reopening within TTL must not fetch');assert.equal(modal().props.isOpen,true);assert.equal(loadingDialog().props.open,false);
+ await cached;
+ modal().props.onClose();await settle();clock+=30001;
+ const expired=detailButton().props.onClick({stopPropagation(){}});await settle();assert.equal(details.length,3,'expired detail must fetch');details[2].resolve(payload);await expired;await settle();
+ await refresh().props.onClick();await settle();
+ const failed=detailButton().props.onClick({stopPropagation(){}});await settle();assert.equal(details.length,4,'refresh must clear cached details');assert.equal(loadingDialog().props.open,true);details[3].resolve({status:'error',message:'offline'});await failed;await settle();assert.equal(loadingDialog().props.open,false);
+ const retry=detailButton().props.onClick({stopPropagation(){}});await settle();assert.equal(details.length,5,'failure must not populate cache');details[4].resolve(payload);await retry;await settle();
  console.log('Siswa: compact initial summary, lazy scoped detail, loading guard, preserved counts and stale request passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

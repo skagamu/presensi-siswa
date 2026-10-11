@@ -18,6 +18,9 @@ export default function DataSiswaPage() {
   const detailRequest = useRef(0);
   const detailPending = useRef(false);
   const detailStarted = useRef(0);
+  const summaryStarted = useRef(0);
+  // shortcut: other users' edits may lag 30s; use server invalidation if immediate freshness is required.
+  const detailCache = useRef(new Map<string, { expiresAt: number; data: SiswaDetailData }>());
   const [isLoading, setIsLoading] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,6 +31,8 @@ export default function DataSiswaPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const loadAllData = async (fresh = false) => {
+    detailCache.current.clear();
+    summaryStarted.current = Date.now();
     detailRequest.current += 1;
     detailPending.current = false;
     setLoadingDetail(false);
@@ -39,6 +44,7 @@ export default function DataSiswaPage() {
       if (res.status !== "success" || !res.data) throw new Error(res.message || "Data tidak tersedia.");
       setAllStudents(res.data.students.map(s => ({ ...s, tingkat: s.tingkat || s.kelas.split(" ")[0], logs: [], kasus: [], penyelesaian: [] })));
     } catch {
+      summaryStarted.current = 0;
       toast.error("Gagal memuat data siswa. Coba muat ulang.");
     } finally { setIsLoading(false); }
   };
@@ -47,6 +53,15 @@ export default function DataSiswaPage() {
     loadAllData();
     return () => { detailRequest.current += 1; detailPending.current = false; };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || process.env.NODE_ENV !== "development" || isLoading || !summaryStarted.current) return;
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => console.info("[BK_UI]", JSON.stringify({ action: "studentSummaryPaint", elapsedMs: Date.now() - summaryStarted.current, studentCount: allStudents.length })));
+    });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [isLoading, allStudents.length]);
 
   useEffect(() => {
     if (typeof window === "undefined" || process.env.NODE_ENV !== "development" || !isModalOpen || !detailStarted.current) return;
@@ -88,6 +103,12 @@ export default function DataSiswaPage() {
     // Ukur waktu dari klik pengguna; baris ini berjalan di event handler.
     // eslint-disable-next-line react-hooks/purity
     detailStarted.current = Date.now();
+    const cached = detailCache.current.get(siswa.nis);
+    if (cached && cached.expiresAt > detailStarted.current) {
+      setSelectedSiswaDetail(cached.data);
+      setIsModalOpen(true);
+      return;
+    }
     detailPending.current = true;
     setLoadingDetail(true);
     try {
@@ -95,12 +116,14 @@ export default function DataSiswaPage() {
       if (request !== detailRequest.current) return;
       if (res.status !== "success" || !res.data) throw new Error(res.message || "Detail tidak tersedia.");
       const { logs, kasus, penyelesaian } = res.data;
-      setSelectedSiswaDetail({
+      const detail = {
         ...siswa,
         logs: logs.filter(l => l.nis === siswa.nis).map(l => ({ tanggal: l.tanggal, status: l.status_presensi, adaSurat: l.ada_surat_dokter, linkBukti: l.link_bukti_izin })),
         kasus: kasus.filter(k => k.nis === siswa.nis).map(k => ({ tanggal: k.tanggal, pelanggaran: k.jenis_pelanggaran })),
         penyelesaian: penyelesaian.filter(p => p.nis === siswa.nis).map(p => ({ tanggal: p.waktu_selesai, tindakan: p.catatan_konseling, guru: p.ditangani_oleh, linkPdf: p.link_pdf_drive })),
-      });
+      };
+      detailCache.current.set(siswa.nis, { expiresAt: detailStarted.current + 30000, data: detail });
+      setSelectedSiswaDetail(detail);
       setIsModalOpen(true);
     } catch {
       if (request === detailRequest.current) toast.error("Gagal memuat detail siswa. Coba lagi.");
