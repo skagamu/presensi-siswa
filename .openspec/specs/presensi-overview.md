@@ -13,3 +13,4 @@ Sistem Presensi & Monitoring Siswa untuk Bimbingan Konseling (BK). Menampilkan s
 - Tech Stack: Next.js (App Router), Tailwind CSS, shadcn/ui.
 - Components to use: `Card`, `Table`, `Dialog`, `Input`, `Select`, `Button`, `Badge`, `Avatar`.
 - Layout: Responsive Dashboard dengan Sidebar & Header Navigation.
+- **Input Presensi weekend:** saat tanggal Sabtu/Minggu, sembunyikan roster dan nonaktifkan simpan; pesan penjelas harus tetap terlihat di layar kecil tanpa tertutup bar aksi bawah. Tidak ada perubahan schema sheet; gunakan date picker, status, roster, dan tombol simpan yang sudah ada.
