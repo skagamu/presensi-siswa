@@ -15,7 +15,7 @@ import {
   downloadReportImage,
   copyReportImageToClipboard,
 } from "@/lib/reportImage";
-import { jakartaToday, cappedRange, reportStatus, periodCounts } from "@/lib/reportData";
+import { jakartaToday, cappedRange, schoolDatesInRange, reportStatus, periodCounts } from "@/lib/reportData";
 
 const shortDayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
@@ -107,30 +107,17 @@ export default function RekapitulasiMatrixPage() {
       start = end;
       end = temp;
     }
-    const cur = new Date(`${start}T00:00:00`);
-    const endD = new Date(`${end}T00:00:00`);
-    const diffDays = Math.round((endD.getTime() - cur.getTime()) / 86400000) + 1;
-    const maxDays = Math.min(diffDays, 60);
-
-    const result: DayInfo[] = [];
-    const iter = new Date(cur);
-
-    for (let i = 0; i < maxDays; i++) {
-      const dow = iter.getDay();
-      if (dow !== 0 && dow !== 6) {
-        const dayNum = iter.getDate();
-        const monthNum = iter.getMonth() + 1;
-        result.push({
-          dateObj: new Date(iter),
-          dayIndex: dayNum,
-          dayName: shortDayNames[dow],
-          dateShort: `${String(dayNum).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}`,
-          dateFull: `${iter.getFullYear()}-${String(iter.getMonth() + 1).padStart(2, "0")}-${String(iter.getDate()).padStart(2, "0")}`,
-        });
-      }
-      iter.setDate(iter.getDate() + 1);
-    }
-    return result;
+    return schoolDatesInRange(start, end).map((date) => {
+      const [year, month, day] = date.split("-").map(Number);
+      const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
+      return {
+        dateObj: new Date(year, month - 1, day),
+        dayIndex: day,
+        dayName: shortDayNames[dow],
+        dateShort: `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}`,
+        dateFull: date,
+      };
+    });
   }, [startDate, endDate]);
 
   const daysArray = useMemo(() => {
@@ -169,10 +156,11 @@ export default function RekapitulasiMatrixPage() {
         const d1 = new Date(`${start}T00:00:00`).getTime();
         const d2 = new Date(`${end}T00:00:00`).getTime();
         const diff = Math.round((d2 - d1) / 86400000) + 1;
-        if (diff > 60) {
-          end = cappedRange(start, end)[1];
+        const maxCalendarDays = mode === "KUSTOM" ? 365 : 60;
+        if (diff > maxCalendarDays) {
+          end = cappedRange(start, end, maxCalendarDays)[1];
           setEndDate(end);
-          toast.info("Rentang dibatasi maksimal 60 hari.");
+          toast.info(`Rentang dibatasi maksimal ${maxCalendarDays} hari kalender.`);
         }
         const res = await getRekapRentang({ start_date: start, end_date: end, tingkat: tingkat as "X" | "XI" | "XII" | "SEMUA" });
         if (version !== fetchVersion.current) return;
@@ -274,8 +262,8 @@ export default function RekapitulasiMatrixPage() {
         const d1 = new Date(`${val}T00:00:00`).getTime();
         const d2 = new Date(`${endDate}T00:00:00`).getTime();
         const diff = Math.round((d2 - d1) / 86400000) + 1;
-        if (diff > 60) {
-          const maxEnd = cappedRange(val, endDate)[1];
+        if (diff > 365) {
+          const maxEnd = cappedRange(val, endDate, 365)[1];
           setEndDate(maxEnd);
         }
       }
@@ -291,9 +279,9 @@ export default function RekapitulasiMatrixPage() {
         const d1 = new Date(`${startDate}T00:00:00`).getTime();
         const d2 = new Date(`${val}T00:00:00`).getTime();
         const diff = Math.round((d2 - d1) / 86400000) + 1;
-        if (diff > 60) {
-          toast.info("Rentang dibatasi maksimal 60 hari.");
-          const maxEnd = cappedRange(startDate, val)[1];
+        if (diff > 365) {
+          toast.info("Rentang dibatasi maksimal 365 hari kalender.");
+          const maxEnd = cappedRange(startDate, val, 365)[1];
           setEndDate(maxEnd);
         } else {
           setEndDate(val);
@@ -373,7 +361,9 @@ export default function RekapitulasiMatrixPage() {
     const yy = String(dateObj.getFullYear()).slice(-2);
     const tanggalSingkat = `${dd}/${mm}/${yy}`;
     const titleDate = mode === "BULANAN" ? new Date(`${bulan}-01T00:00:00`) : dateObj;
-    const bulanTahun = mode === "KUSTOM" ? `${startDate} - ${endDate}` : `${monthNames[titleDate.getMonth()]} ${titleDate.getFullYear()}`;
+    const bulanTahun = mode === "KUSTOM"
+      ? `${startDate.split("-").reverse().join("/")} - ${endDate.split("-").reverse().join("/")}`
+      : `${monthNames[titleDate.getMonth()]} ${titleDate.getFullYear()}`;
 
 
     // Target students filter
@@ -434,6 +424,8 @@ export default function RekapitulasiMatrixPage() {
       weekDays: weekInfo.days,
       daysInMonth,
       customDays: mode === "KUSTOM" ? customDays : undefined,
+      kelasFilter,
+      statusFilter,
       totalTidakHadir: totalTidakHadirCount,
       totalSiswa: displayedData.length,
       schoolDays: periodDates.length,
@@ -738,12 +730,12 @@ export default function RekapitulasiMatrixPage() {
       )}
 
       {mode === "KUSTOM" && (
-        <div className="bg-purple-50/60 border border-purple-200 rounded-md p-3 text-xs text-purple-950 flex items-center justify-between">
+        <div className="bg-purple-50/60 border border-purple-200 rounded-md p-3 text-xs text-purple-950 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <span>
             Menampilkan rentang: <strong>{startDate}</strong> s/d <strong>{endDate}</strong>
           </span>
           <span className="text-[11px] text-purple-700 font-semibold">
-            ({customDaysArray.length} Hari)
+            ({customDaysArray.length} hari kerja · Maks. 1 tahun · Akhir pekan dikecualikan)
           </span>
         </div>
       )}

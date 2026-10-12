@@ -38,6 +38,8 @@ export interface ReportConfig {
   daysInMonth?: number;
   // For Kustom: ordered list of days in the range
   customDays?: DayInfo[];
+  kelasFilter?: string;
+  statusFilter?: string;
   // Stats
   totalTidakHadir: number;
   totalSiswa: number;

@@ -10,11 +10,25 @@ export function isSchoolDayWib(date: string): boolean {
   const day = new Date(`${date}T12:00:00+07:00`);
   return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === date && ![0, 6].includes(day.getUTCDay());
 }
-export function cappedRange(start: string, end: string): [string, string] {
+export function cappedRange(start: string, end: string, maxCalendarDays = 60): [string, string] {
   if (start > end) [start, end] = [end, start];
   const limit = new Date(`${start}T00:00:00`);
-  limit.setDate(limit.getDate() + 59);
+  limit.setDate(limit.getDate() + maxCalendarDays - 1);
   return [start, end > dateKey(limit) ? dateKey(limit) : end];
+}
+export function schoolDatesInRange(start: string, end: string, maxCalendarDays = 365): string[] {
+  // shortcut: hari sekolah dianggap Senin–Jumat; gunakan kalender sekolah saat libur resmi perlu dikecualikan.
+  if (start > end) [start, end] = [end, start];
+  const [year, month, day] = start.split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, day));
+  const [endYear, endMonth, endDay] = end.split("-").map(Number);
+  const last = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+  const dates: string[] = [];
+  for (let offset = 0; offset < maxCalendarDays && first <= last; offset++) {
+    if (first.getUTCDay() !== 0 && first.getUTCDay() !== 6) dates.push(first.toISOString().slice(0, 10));
+    first.setUTCDate(first.getUTCDate() + 1);
+  }
+  return dates;
 }
 export function reportStatus(logs: Record<string, string>, date: string, monthly: boolean, today = jakartaToday()): string {
   if (date > today) return "";
